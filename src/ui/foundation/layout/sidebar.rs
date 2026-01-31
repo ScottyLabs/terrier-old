@@ -21,6 +21,7 @@ use crate::{
 #[component]
 fn NavItems(
     slug: String,
+    has_messages: bool,
     has_dashboard: bool,
     has_applicants: bool,
     has_people: bool,
@@ -94,6 +95,17 @@ fn NavItems(
                     label: "Schedule".to_string(),
                     icon: LdCalendar,
                     to: Route::HackathonSchedule {
+                        slug: slug.clone(),
+                    },
+                }
+            }
+        }
+        if has_messages {
+            div { onclick: handle_click,
+                SidebarItem {
+                    label: "Messages".to_string(),
+                    icon: LdMessageSquare,
+                    to: Route::HackathonMessages {
                         slug: slug.clone(),
                     },
                 }
@@ -218,11 +230,22 @@ pub fn Sidebar(
     let mut menu_open = use_signal(|| false);
 
     // Check if user has submitted application (status != "draft")
-    let has_submitted_application = application_resource
+    // Check application status: submitted vs admitted (accepted/confirmed)
+    let application_status_opt = application_resource
         .read()
         .as_ref()
         .and_then(|app| app.as_ref())
-        .map(|app| app.status != "draft")
+        .map(|app| app.status.clone());
+
+    let has_submitted_application = application_status_opt
+        .as_ref()
+        .map(|s| s != "draft")
+        .unwrap_or(false);
+
+    // Consider a user 'admitted' if their application is accepted or confirmed
+    let has_admitted_application = application_status_opt
+        .as_ref()
+        .map(|s| s == "accepted" || s == "confirmed")
         .unwrap_or(false);
 
     // Pre-compute role-based visibility flags
@@ -239,6 +262,8 @@ pub fn Sidebar(
     let has_judging_admin = has(JUDGING_ADMIN_ROLES);
     let has_results = has(RESULTS_ROLES);
     let has_settings = has(SETTINGS_ROLES);
+    // Only show messages to admitted participants or staff roles
+    let has_messages = has_admitted_application || has(PEOPLE_ROLES) || has(DASHBOARD_ROLES);
 
     rsx! {
         if *is_mobile.read() {
@@ -277,6 +302,7 @@ pub fn Sidebar(
                     nav { class: "flex flex-col gap-2 px-6 py-4",
                         NavItems {
                             slug: slug.clone(),
+                            has_messages,
                             has_dashboard,
                             has_applicants,
                             has_people,
@@ -313,6 +339,7 @@ pub fn Sidebar(
                 nav { class: "flex flex-col gap-1 items-start w-full",
                     NavItems {
                         slug: slug.clone(),
+                        has_messages,
                         has_dashboard,
                         has_applicants,
                         has_people,

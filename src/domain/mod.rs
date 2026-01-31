@@ -34,6 +34,7 @@ pub mod applications;
 pub mod auth;
 pub mod hackathons;
 pub mod judging;
+pub mod messages;
 pub mod mock_expo;
 pub mod people;
 pub mod prizes;

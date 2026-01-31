@@ -21,6 +21,8 @@ mod m20260118_add_judging_tables;
 mod m20260119_add_judge_feature_assignment;
 mod m20260127_000000_add_table_number_to_submission;
 mod m20260127_000001_add_prize_required_events;
+mod m20260131_120000_create_messages_and_groups;
+mod m20260131_125000_add_messages_content;
 mod m20260131_add_judge_prize_track;
 mod m20260131_add_judge_walk_type;
 
@@ -53,6 +55,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20260127_000001_add_prize_required_events::Migration),
             Box::new(m20260131_add_judge_prize_track::Migration),
             Box::new(m20260131_add_judge_walk_type::Migration),
+            Box::new(m20260131_120000_create_messages_and_groups::Migration),
+            Box::new(m20260131_125000_add_messages_content::Migration),
         ]
     }
 }
