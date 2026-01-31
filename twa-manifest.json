@@ -1,8 +1,8 @@
 {
-  "packageId": "org.scottylabs.terrier.twa",
+  "packageId": "org.scottylabs.thdapp",
   "host": "terrier.scottylabs.org",
-  "name": "TartanHacks 2026",
-  "launcherName": "th26",
+  "name": "TartanHacks Dashboard",
+  "launcherName": "TH 26",
   "display": "fullscreen",
   "themeColor": "#F4F2F3",
   "themeColorDark": "#000000",
@@ -19,8 +19,8 @@
     "path": "/home/krit/dev/terrier/android.keystore",
     "alias": "android"
   },
-  "appVersionName": "1",
-  "appVersionCode": 1,
+  "appVersionName": "24",
+  "appVersionCode": 24,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://terrier.scottylabs.org/h/tartanhacks-2026/manifest.json",
@@ -42,5 +42,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "1"
+  "appVersion": "24"
 }

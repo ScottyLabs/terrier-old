@@ -21,11 +21,11 @@ plugins {
 }
 
 def twaManifest = [
-    applicationId: 'org.scottylabs.terrier.twa',
+    applicationId: 'org.scottylabs.thdapp',
     hostName: 'terrier.scottylabs.org', // The domain being opened in the TWA.
     launchUrl: '/h/tartanhacks-2026/', // The start path for the TWA. Must be relative to the domain.
-    name: 'TartanHacks 2026', // The application name.
-    launcherName: 'th26', // The name shown on the Android Launcher.
+    name: 'TartanHacks Dashboard', // The application name.
+    launcherName: 'TH 26', // The name shown on the Android Launcher.
     themeColor: '#F4F2F3', // The color used for the status bar.
     themeColorDark: '#000000', // The color used for the dark status bar.
     navigationColor: '#000000', // The color used for the navigation bar.
@@ -52,13 +52,13 @@ def twaManifest = [
 
 android {
     compileSdkVersion 36
-    namespace "org.scottylabs.terrier.twa"
+    namespace "org.scottylabs.thdapp"
     defaultConfig {
-        applicationId "org.scottylabs.terrier.twa"
+        applicationId "org.scottylabs.thdapp"
         minSdkVersion 21
         targetSdkVersion 35
-        versionCode 1
-        versionName "1"
+        versionCode 24
+        versionName "24"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name

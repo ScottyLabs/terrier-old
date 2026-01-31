@@ -33,3 +33,5 @@ build/
 app/build/
 
 local.properties
+
+upload_certificate.pem
