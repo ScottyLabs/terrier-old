@@ -97,6 +97,11 @@ pub enum Route {
                     slug: String,
                     user_id: i32
                 },
+            #[route("/table-checkin/:table_number")]
+                HackathonTableCheckin {
+                    slug: String,
+                    table_number: String
+                },
             #[route("/profile")]
                 HackathonProfile {
                     slug: String
@@ -111,6 +116,22 @@ pub enum Route {
                 },
             #[route("/prize-tracks")]
                 HackathonPrizeTracks {
+                    slug: String
+                },
+            #[route("/judge")]
+                HackathonJudge {
+                    slug: String
+                },
+            #[route("/judging-admin")]
+                HackathonJudgingAdmin {
+                    slug: String
+                },
+            #[route("/results")]
+                HackathonResults {
+                    slug: String
+                },
+            #[route("/mock-expo")]
+                HackathonMockExpo {
                     slug: String
                 },
         #[end_layout]

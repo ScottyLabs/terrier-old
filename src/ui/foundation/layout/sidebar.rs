@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::ld_icons::{
-    LdBookUser, LdBox, LdCalendar, LdClipboardPen, LdFileText, LdHome, LdMenu, LdMessageSquare,
-    LdQrCode, LdSettings, LdTrophy, LdUser, LdUsers, LdX,
+    LdBookUser, LdBox, LdCalendar, LdClipboardPen, LdFileText, LdGavel, LdHome, LdMenu,
+    LdMessageSquare, LdQrCode, LdSettings, LdTrophy, LdUser, LdUsers, LdX,
 };
 use dioxus_free_icons::{Icon, IconShape};
 
@@ -9,8 +9,8 @@ use crate::{
     Route,
     auth::{
         APPLICANTS_ROLES, APPLY_ROLES, CHECKIN_ROLES, DASHBOARD_ROLES, HackathonRole,
-        HackathonRoleType, PEOPLE_ROLES, PRIZE_TRACKS_ROLES, SCHEDULE_ROLES, SETTINGS_ROLES,
-        SUBMISSION_ROLES, TEAM_ROLES, has_access,
+        HackathonRoleType, JUDGE_ROLES, JUDGING_ADMIN_ROLES, PEOPLE_ROLES, PRIZE_TRACKS_ROLES,
+        RESULTS_ROLES, SCHEDULE_ROLES, SETTINGS_ROLES, SUBMISSION_ROLES, TEAM_ROLES, has_access,
     },
     domain::applications::handlers::get_application,
     ui::foundation::components::{Header, HeaderSize},
@@ -30,6 +30,9 @@ fn NavItems(
     has_checkin: bool,
     has_apply: bool,
     has_prize_tracks: bool,
+    has_judge: bool,
+    has_judging_admin: bool,
+    has_results: bool,
     has_settings: bool,
     include_settings_in_nav: bool,
     on_item_click: Option<EventHandler<()>>,
@@ -96,15 +99,7 @@ fn NavItems(
                 }
             }
         }
-        div { onclick: handle_click,
-            SidebarItem {
-                label: "Messages".to_string(),
-                icon: LdMessageSquare,
-                to: Route::HackathonMessages {
-                    slug: slug.clone(),
-                },
-            }
-        }
+
         if has_submission {
             div { onclick: handle_click,
                 SidebarItem {
@@ -127,15 +122,7 @@ fn NavItems(
                 }
             }
         }
-        div { onclick: handle_click,
-            SidebarItem {
-                label: "Profile".to_string(),
-                icon: LdUser,
-                to: Route::HackathonProfile {
-                    slug: slug.clone(),
-                },
-            }
-        }
+
         if has_apply {
             div { onclick: handle_click,
                 SidebarItem {
@@ -153,6 +140,39 @@ fn NavItems(
                     label: "Prize Tracks".to_string(),
                     icon: LdTrophy,
                     to: Route::HackathonPrizeTracks {
+                        slug: slug.clone(),
+                    },
+                }
+            }
+        }
+        if has_judge {
+            div { onclick: handle_click,
+                SidebarItem {
+                    label: "Judge".to_string(),
+                    icon: LdGavel,
+                    to: Route::HackathonJudge {
+                        slug: slug.clone(),
+                    },
+                }
+            }
+        }
+        if has_judging_admin {
+            div { onclick: handle_click,
+                SidebarItem {
+                    label: "Judging Admin".to_string(),
+                    icon: LdGavel,
+                    to: Route::HackathonJudgingAdmin {
+                        slug: slug.clone(),
+                    },
+                }
+            }
+        }
+        if has_results {
+            div { onclick: handle_click,
+                SidebarItem {
+                    label: "Results".to_string(),
+                    icon: LdTrophy,
+                    to: Route::HackathonResults {
                         slug: slug.clone(),
                     },
                 }
@@ -215,6 +235,9 @@ pub fn Sidebar(
     let has_checkin = has(CHECKIN_ROLES);
     let has_apply = has(APPLY_ROLES);
     let has_prize_tracks = has(PRIZE_TRACKS_ROLES);
+    let has_judge = has(JUDGE_ROLES);
+    let has_judging_admin = has(JUDGING_ADMIN_ROLES);
+    let has_results = has(RESULTS_ROLES);
     let has_settings = has(SETTINGS_ROLES);
 
     rsx! {
@@ -263,6 +286,9 @@ pub fn Sidebar(
                             has_checkin,
                             has_apply,
                             has_prize_tracks,
+                            has_judge,
+                            has_judging_admin,
+                            has_results,
                             has_settings,
                             include_settings_in_nav: true,
                             on_item_click: move |_| menu_open.set(false),
@@ -296,6 +322,9 @@ pub fn Sidebar(
                         has_checkin,
                         has_apply,
                         has_prize_tracks,
+                        has_judge,
+                        has_judging_admin,
+                        has_results,
                         has_settings,
                         include_settings_in_nav: false,
                         on_item_click: None,
@@ -339,6 +368,9 @@ pub fn SidebarItem<I: IconShape + Clone + PartialEq + 'static>(
         (Route::HackathonProfile { .. }, Route::HackathonProfile { .. }) => true,
         (Route::HackathonApply { .. }, Route::HackathonApply { .. }) => true,
         (Route::HackathonPrizeTracks { .. }, Route::HackathonPrizeTracks { .. }) => true,
+        (Route::HackathonJudge { .. }, Route::HackathonJudge { .. }) => true,
+        (Route::HackathonJudgingAdmin { .. }, Route::HackathonJudgingAdmin { .. }) => true,
+        (Route::HackathonResults { .. }, Route::HackathonResults { .. }) => true,
         (Route::HackathonSettings { .. }, Route::HackathonSettings { .. }) => true,
         _ => false,
     };

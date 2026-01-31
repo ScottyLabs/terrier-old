@@ -1,3 +1,43 @@
+//! # Server Module
+//!
+//! *Written by Claude 4.5 Opus*
+//!
+//! This module configures and starts the Axum HTTP server.
+//!
+//! ## Design Decisions
+//!
+//! - **Startup order**: Services are initialized in dependency order:
+//!   1. Tracing (logging)
+//!   2. Configuration (environment variables)
+//!   3. Database (PostgreSQL + migrations)
+//!   4. Redis (session storage)
+//!   5. MinIO (S3 bucket with public read policy)
+//!   6. OIDC client discovery
+//!   7. Router assembly
+//!
+//! - **Middleware layering**: Applied bottom-up (last added = first executed):
+//!   - `DefaultBodyLimit` (10MB for file uploads)
+//!   - `session_layer` (Redis-backed sessions)
+//!   - `oidc_auth_service` (JWT validation)
+//!   - `oidc_login_service` (login redirects)
+//!   - `sync_user_middleware` (creates/updates user in DB from OIDC claims)
+//!
+//! - **Router structure**:
+//!   - `dioxus_router` - Serves the Dioxus SPA with SSR
+//!   - `api_router` - Auth endpoints, Swagger UI, manifests
+//!   - `public_router` - Apple App Site Association (no auth)
+//!
+//! - **Auto-migration**: Database migrations run automatically on startup.
+//!   This ensures the schema is always up-to-date in development.
+//!
+//! ## Key Routes
+//!
+//! - `/auth/login` - Initiates OIDC login flow
+//! - `/auth/logout` - Clears session
+//! - `/auth/callback` - OIDC redirect handler
+//! - `/swagger` - OpenAPI documentation UI
+//! - `/health` - Health check endpoint
+
 use axum::{
     Extension, Router,
     extract::DefaultBodyLimit,
@@ -49,6 +89,27 @@ pub async fn setup() {
         .await
         .expect("Failed to connect to database");
     tracing::info!("Database connected successfully");
+
+    // Spawn periodic ranking task
+    let ranking_db = db.clone();
+    tokio::spawn(async move {
+        // Wait for initial startup before first run
+        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // 5 minutes
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            interval.tick().await;
+            tracing::info!("Starting periodic ranking update...");
+            if let Err(e) =
+                crate::domain::judging::score::update_all_active_rankings(&ranking_db).await
+            {
+                tracing::error!("Periodic ranking update failed: {}", e);
+            }
+            tracing::info!("Periodic ranking update completed.");
+        }
+    });
 
     // Run database migrations
     tracing::info!("Running database migrations...");

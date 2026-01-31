@@ -276,13 +276,13 @@
 				CODE_SIGN_ENTITLEMENTS = TerrierPWA/TerrierPWA.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 543;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 4Y39FMA838;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TerrierPWA/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Terrier;
+				INFOPLIST_KEY_CFBundleDisplayName = "TartanHacks 2026";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -293,7 +293,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 6.0.0;
+				"MARKETING_VERSION[sdk=iphoneos*]" = 6.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = terrier.scottylabs.org;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -314,13 +315,13 @@
 				CODE_SIGN_ENTITLEMENTS = TerrierPWA/TerrierPWA.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 543;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = X39S5JJUD8;
+				DEVELOPMENT_TEAM = 4Y39FMA838;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TerrierPWA/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Terrier;
+				INFOPLIST_KEY_CFBundleDisplayName = "TartanHacks 2026";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -331,8 +332,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = org.scottylabs.terrier;
+				MARKETING_VERSION = 6.0.0;
+				"MARKETING_VERSION[sdk=iphoneos*]" = 6.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.scottylabs.slapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

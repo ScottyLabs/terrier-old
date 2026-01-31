@@ -1,4 +1,5 @@
 pub mod application;
+pub mod checkin;
 pub mod dashboard;
 pub mod hackathon;
 pub mod people;

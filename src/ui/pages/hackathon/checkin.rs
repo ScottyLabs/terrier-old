@@ -19,6 +19,7 @@ use crate::{
         remove_self_checkin, self_checkin,
     },
     domain::hackathons::types::{HackathonInfo, ScheduleEvent},
+    ui::features::checkin::QRScannerModal,
     ui::features::dashboard::QRModal,
     ui::foundation::utils::generate_qr_svg,
 };
@@ -278,7 +279,7 @@ fn ParticipantCheckinView(
                                     }
                                 }
                                 div {
-                                    class: "bg-white rounded-xl p-4",
+                                    class: "bg-background-neutral-primary rounded-xl p-4",
                                     dangerous_inner_html: "{qr_svg}",
                                 }
                                 p { class: "text-xs text-foreground-neutral-tertiary text-center mt-2",
@@ -321,7 +322,7 @@ fn EventCard(
 
     rsx! {
         button {
-            class: "w-full rounded-2xl px-4 py-4 flex items-center gap-4 text-left shadow-sm {bg_class} hover:bg-blue-gray-200 transition-colors",
+            class: "w-full rounded-2xl px-4 py-4 flex items-center gap-4 text-left shadow-sm {bg_class} hover:bg-background-neutral-tertiary-hover transition-colors",
             onclick: move |_| on_click.call(event_for_click.clone()),
             // Icon/checkbox
             div { class: "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
@@ -605,6 +606,9 @@ fn EventDetailPanel(slug: String, event: ScheduleEvent, on_refresh: EventHandler
     let mut participant_id_input = use_signal(|| String::new());
     let mut search_query = use_signal(|| String::new());
 
+    // QR Scanner modal state
+    let mut show_qr_scanner = use_signal(|| false);
+
     // Confirmation modal state
     let mut pending_participant: Signal<Option<ParticipantInfo>> = use_signal(|| None);
     let mut is_confirming = use_signal(|| false);
@@ -671,10 +675,10 @@ fn EventDetailPanel(slug: String, event: ScheduleEvent, on_refresh: EventHandler
                     "Check-in"
                 }
 
-                // Scan QR Code
+                // Scan QR button
                 button {
                     class: "w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-stroke-neutral-1 hover:bg-background-neutral-secondary transition-colors mb-3",
-                    onclick: move |_| show_scanner_modal.set(true),
+                    onclick: move |_| show_qr_scanner.set(true),
                     Icon { width: 20, height: 20, icon: LdQrCode }
                     span { class: "text-foreground-neutral-primary", "Scan QR code" }
                 }
@@ -816,25 +820,28 @@ fn EventDetailPanel(slug: String, event: ScheduleEvent, on_refresh: EventHandler
             }
         }
 
-            // Scanner Modal
-            if show_scanner_modal() {
-                QRModal {
-                    // Props for QRModal (dummy values for scanner mode)
-                    qr_svg: String::new(),
-                    user_id: 0,
-                    on_close: move |_| show_scanner_modal.set(false),
-                    on_scan: move |scanned_id: String| {
-                        let slug = slug_for_scanner.clone();
-                        show_scanner_modal.set(false);
-                         if let Ok(user_id) = scanned_id.parse::<i32>() {
-                            nav.push(Route::HackathonScan { slug: slug.clone(), user_id });
-                        }
+        // Scanner Modal
+        if show_scanner_modal() {
+            QRModal {
+                // Props for QRModal (dummy values for scanner mode)
+                qr_svg: String::new(),
+                user_id: 0,
+                on_close: move |_| show_scanner_modal.set(false),
+                on_scan: move |scanned_id: String| {
+                    let slug = slug_for_scanner.clone();
+                    show_scanner_modal.set(false);
+                    if let Ok(user_id) = scanned_id.parse::<i32>() {
+                        nav.push(Route::HackathonScan {
+                            slug: slug.clone(),
+                            user_id,
+                        });
                     }
-                }
+                },
             }
+        }
 
-            // Confirmation modal
-            if let Some(participant) = pending_participant() {
+        // Confirmation modal
+        if let Some(participant) = pending_participant() {
             div {
                 class: "fixed inset-0 flex items-center justify-center z-50",
                 style: "background-color: rgba(0, 0, 0, 0.5);",
@@ -853,7 +860,7 @@ fn EventDetailPanel(slug: String, event: ScheduleEvent, on_refresh: EventHandler
 
                     // Participant info card
                     div { class: "flex items-center gap-3 px-4 py-3 bg-background-neutral-primary rounded-xl mb-6",
-                        div { class: "w-10 h-10 rounded-full bg-gray-300 flex-shrink-0" }
+                        div { class: "w-10 h-10 rounded-full bg-background-neutral-tertiary flex-shrink-0" }
                         div { class: "flex-1",
                             p { class: "font-medium text-foreground-neutral-primary",
                                 "{participant.name}"
@@ -943,6 +950,20 @@ fn EventDetailPanel(slug: String, event: ScheduleEvent, on_refresh: EventHandler
             }
         }
 
+        // QR Scanner modal
+        if show_qr_scanner() {
+            QRScannerModal {
+                slug: slug.clone(),
+                event_id,
+                on_close: move |_| show_qr_scanner.set(false),
+                on_checkin_success: move |_| {
+                    // Refresh the attendee list after successful check-in
+                    attendees_resource.restart();
+                    on_refresh.call(());
+                },
+            }
+        }
+
         // Error popup
         if let Some(error) = error_message() {
             div {
@@ -993,7 +1014,7 @@ fn AttendeeRow(
     rsx! {
         div { class: "flex items-center gap-3 px-3 py-2 rounded-lg bg-background-neutral-secondary",
             // Avatar placeholder
-            div { class: "w-8 h-8 rounded-full bg-gray-300 flex-shrink-0" }
+            div { class: "w-8 h-8 rounded-full bg-background-neutral-tertiary flex-shrink-0" }
 
             // Name
             div { class: "flex-1",

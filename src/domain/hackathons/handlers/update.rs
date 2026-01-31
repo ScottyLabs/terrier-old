@@ -82,6 +82,9 @@ pub async fn update_hackathon(
         app_icon_url: hackathon.app_icon_url,
         theme_color: hackathon.theme_color,
         background_color: hackathon.background_color,
+        submissions_closed: hackathon.submissions_closed,
+        judging_started: hackathon.judging_started,
+        judge_session_timeout_minutes: hackathon.judge_session_timeout_minutes,
     })
 }
 

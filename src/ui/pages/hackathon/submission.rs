@@ -176,6 +176,11 @@ pub fn HackathonSubmission(slug: String) -> Element {
                             .and_then(|opt| opt.as_ref())
                             .map(|s| s.submitted_at.clone())
                             .unwrap_or_default(),
+                        table_number: submission_resource
+                            .read()
+                            .as_ref()
+                            .and_then(|opt| opt.as_ref())
+                            .and_then(|s| s.table_number.clone()),
                         on_edit: move |_| show_submission_modal.set(true),
                     }
                 } else {
@@ -230,8 +235,9 @@ pub fn HackathonSubmission(slug: String) -> Element {
                     schema,
                     hackathon_slug: slug.clone(),
                     initial_values: if has_submitted() { Some(submission_data()) } else { None },
+                    initial_table_number: submission_resource.read().as_ref().and_then(|s| s.as_ref()).and_then(|s| s.table_number.clone()),
                     on_close: move |_| show_submission_modal.set(false),
-                    on_submit: move |data: std::collections::HashMap<String, String>| {
+                    on_submit: move |(data, table_num): (std::collections::HashMap<String, String>, Option<String>)| {
                         submission_data.set(data);
                         // Refetch submission data to update has_submitted state
                         submission_resource.restart();
@@ -302,6 +308,7 @@ fn SubmittedView(
     selected_prize_tracks: Signal<std::collections::HashSet<i32>>,
     hackathon_slug: String,
     submitted_at: String,
+    table_number: Option<String>,
     on_edit: EventHandler<()>,
 ) -> Element {
     // Format the submitted_at timestamp for display
@@ -385,6 +392,11 @@ fn SubmittedView(
                         }
                         h2 { class: "text-lg font-semibold text-foreground-neutral-primary",
                             "Your Submission"
+                        }
+                        if let Some(table) = table_number {
+                            span { class: "px-2 py-0.5 bg-background-brand-primary text-white text-xs font-bold rounded",
+                                "Table {table}"
+                            }
                         }
                         span { class: "text-sm text-foreground-neutral-secondary ml-2",
                             "{formatted_time}"
@@ -591,10 +603,12 @@ fn SubmissionFormModal(
     schema: FormSchema,
     hackathon_slug: String,
     initial_values: Option<std::collections::HashMap<String, String>>,
+    initial_table_number: Option<String>,
     on_close: EventHandler<()>,
-    on_submit: EventHandler<std::collections::HashMap<String, String>>,
+    on_submit: EventHandler<(std::collections::HashMap<String, String>, Option<String>)>,
 ) -> Element {
     let mut form_values = use_signal(|| initial_values.clone().unwrap_or_default());
+    let mut table_number = use_signal(|| initial_table_number.clone().unwrap_or_default());
     let mut is_submitting = use_signal(|| false);
     let mut error_message = use_signal(|| None::<String>);
 
@@ -635,13 +649,25 @@ fn SubmissionFormModal(
 
                 let request = SubmitProjectRequest {
                     submission_data: submission_json,
+                    table_number: if table_number().is_empty() {
+                        None
+                    } else {
+                        Some(table_number())
+                    },
                     prize_track_ids: vec![], // Prize tracks are selected separately after submission
                 };
 
                 match submit_project(slug, request).await {
                     Ok(_) => {
                         is_submitting.set(false);
-                        on_submit.call(data);
+                        on_submit.call((
+                            data,
+                            if table_number().is_empty() {
+                                None
+                            } else {
+                                Some(table_number())
+                            },
+                        ));
                     }
                     Err(e) => {
                         is_submitting.set(false);
@@ -678,6 +704,21 @@ fn SubmissionFormModal(
                     }
 
                     form { class: "flex flex-col gap-6", onsubmit: handle_submit,
+                        // Table Assignment section
+                        div { class: "bg-background-neutral-primary rounded-lg p-6",
+                            h3 { class: "text-lg font-semibold text-foreground-neutral-primary mb-4",
+                                "Table Assignment"
+                            }
+                            Input {
+                                label: "Table Number".to_string(),
+                                placeholder: "e.g. A12".to_string(),
+                                value: table_number,
+                                variant: InputVariant::Primary,
+                                help_text: Some("Optionally provide your team's table number if you have one.".to_string()),
+                                oninput: move |evt: Event<FormData>| table_number.set(evt.value()),
+                            }
+                        }
+
                         for (section_name , fields) in sections().iter() {
                             div { class: "bg-background-neutral-primary rounded-lg p-6",
                                 h3 { class: "text-lg font-semibold text-foreground-neutral-primary mb-4",
@@ -755,7 +796,7 @@ fn SubmissionFieldRenderer(
     });
 
     rsx! {
-        div { class: "flex flex-col gap-2 bg-white",
+        div { class: "flex flex-col gap-2 bg-background-neutral-primary",
             match field_type.clone() {
                 // For submission forms, file fields are URL fields
                 // Fallback for unsupported field types

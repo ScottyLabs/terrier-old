@@ -37,11 +37,11 @@ pub fn HackathonScheduleEvent(slug: String, event_id: i32) -> Element {
     let event = event_resource.read();
 
     rsx! {
-        div { class: "min-h-screen bg-gray-100",
+        div { class: "min-h-screen bg-background-neutral-secondary",
             // Back button header
             div { class: "p-4",
                 button {
-                    class: "p-2 -ml-2 hover:bg-gray-200 rounded-full transition-colors",
+                    class: "p-2 -ml-2 hover:bg-background-neutral-secondary-hover rounded-full transition-colors",
                     onclick: move |_| {
                         nav.push(Route::HackathonSchedule {
                             slug: slug_for_nav.clone(),
@@ -57,9 +57,9 @@ pub fn HackathonScheduleEvent(slug: String, event_id: i32) -> Element {
                     Some(Some(event)) => rsx! {
                         // Title row with edit button on right
                         div { class: "flex items-start justify-between mb-6",
-                            h1 { class: "text-2xl font-bold text-gray-900 flex-1", "{event.name}" }
+                            h1 { class: "text-2xl font-bold text-foreground-neutral-primary flex-1", "{event.name}" }
                             button {
-                                class: "p-2 hover:bg-gray-200 rounded-full transition-colors ml-2",
+                                class: "p-2 hover:bg-background-neutral-secondary-hover rounded-full transition-colors ml-2",
                                 onclick: move |_| {
                                     nav.push(Route::HackathonScheduleEdit {
                                         slug: slug_for_edit.clone(),
@@ -75,7 +75,7 @@ pub fn HackathonScheduleEvent(slug: String, event_id: i32) -> Element {
                                     width: 20,
                                     height: 20,
                                     icon: LdPencil,
-                                    class: "text-gray-600",
+                                    class: "text-foreground-neutral-secondary",
                                 }
                             }
                         }

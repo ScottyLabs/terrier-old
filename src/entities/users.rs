@@ -29,6 +29,16 @@ pub enum Relation {
     Applications,
     #[sea_orm(has_many = "super::event_organizers::Entity")]
     EventOrganizers,
+    #[sea_orm(has_many = "super::judge_feature_assignment::Entity")]
+    JudgeFeatureAssignment,
+    #[sea_orm(has_many = "super::judge_prize_track::Entity")]
+    JudgePrizeTrack,
+    #[sea_orm(has_many = "super::judge_walk_type::Entity")]
+    JudgeWalkType,
+    #[sea_orm(has_many = "super::pairwise_comparison::Entity")]
+    PairwiseComparison,
+    #[sea_orm(has_many = "super::project_visit::Entity")]
+    ProjectVisit,
     #[sea_orm(has_many = "super::team_invitations::Entity")]
     TeamInvitations,
     #[sea_orm(has_many = "super::team_join_requests::Entity")]
@@ -48,6 +58,36 @@ impl Related<super::applications::Entity> for Entity {
 impl Related<super::event_organizers::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::EventOrganizers.def()
+    }
+}
+
+impl Related<super::judge_feature_assignment::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::JudgeFeatureAssignment.def()
+    }
+}
+
+impl Related<super::judge_prize_track::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::JudgePrizeTrack.def()
+    }
+}
+
+impl Related<super::judge_walk_type::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::JudgeWalkType.def()
+    }
+}
+
+impl Related<super::pairwise_comparison::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PairwiseComparison.def()
+    }
+}
+
+impl Related<super::project_visit::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ProjectVisit.def()
     }
 }
 

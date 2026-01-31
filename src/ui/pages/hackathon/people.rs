@@ -6,7 +6,10 @@ use dioxus_free_icons::{
 
 use crate::{
     auth::{HackathonRole, HackathonRoleType, PEOPLE_ROLES, hooks::use_require_access_or_redirect},
-    domain::people::handlers::{HackathonPerson, get_hackathon_people, remove_hackathon_person},
+    domain::people::handlers::{
+        HackathonPerson, UpdateRoleRequest, get_hackathon_people, remove_hackathon_person,
+        update_person_role,
+    },
     ui::{
         features::people::{PeopleModal, PersonCard},
         foundation::components::{
@@ -21,6 +24,15 @@ enum PeopleTab {
     Teams,
 }
 
+/// Available roles for users
+const AVAILABLE_ROLES: [(&str, &str); 5] = [
+    ("participant", "Participant"),
+    ("judge", "Judge"),
+    ("sponsor", "Sponsor"),
+    ("organizer", "Organizer"),
+    ("admin", "Admin"),
+];
+
 #[component]
 pub fn HackathonPeople(slug: String) -> Element {
     if let Some(no_access) = use_require_access_or_redirect(PEOPLE_ROLES) {
@@ -28,6 +40,7 @@ pub fn HackathonPeople(slug: String) -> Element {
     }
 
     let slug_for_remove = slug.clone();
+    let slug_for_role_update = slug.clone();
 
     let mut filter_open = use_signal(|| false);
     let mut selected_filters = use_signal(Vec::new);
@@ -35,6 +48,7 @@ pub fn HackathonPeople(slug: String) -> Element {
     let mut search_query = use_signal(String::new);
     let mut selected_person = use_signal(|| None::<HackathonPerson>);
     let mut show_modal = use_signal(|| false);
+    let mut updating_role: Signal<Option<i32>> = use_signal(|| None); // Track which user's role is being updated
 
     // Get user's role from context
     let user_role = use_context::<Option<HackathonRole>>();
@@ -194,17 +208,79 @@ pub fn HackathonPeople(slug: String) -> Element {
                                 }
                             } else {
                                 for person in people {
-                                    PersonCard {
+                                    // Custom person row with role dropdown
+                                    div {
                                         key: "{person.user_id}",
-                                        name: person.name.clone().unwrap_or_else(|| "Unknown".to_string()),
-                                        role: format_role(&person.role),
-                                        on_view: {
-                                            let person = person.clone();
-                                            move |_| {
-                                                selected_person.set(Some(person.clone()));
-                                                show_modal.set(true);
+                                        class: "flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-stroke-neutral-1 gap-3",
+
+                                        // Left side: Name and email
+                                        div { class: "flex flex-col min-w-0 flex-1",
+                                            p { class: "text-base font-medium leading-6 text-foreground-neutral-primary truncate",
+                                                "{person.name.clone().unwrap_or_else(|| \"Unknown\".to_string())}"
                                             }
-                                        },
+                                            p { class: "text-sm text-foreground-neutral-secondary truncate",
+                                                "{person.email}"
+                                            }
+                                        }
+
+                                        // Right side: Role selector and View button
+                                        div { class: "flex items-center gap-3 flex-shrink-0",
+                                            // Role dropdown (only for admins)
+                                            if is_admin {
+                                                {
+                                                    let person_id = person.user_id;
+                                                    let current_role = person.role.clone();
+                                                    let slug = slug_for_role_update.clone();
+                                                    let is_updating = updating_role().map(|id| id == person_id).unwrap_or(false);
+
+                                                    rsx! {
+                                                        select {
+                                                            class: "px-3 py-1.5 text-sm font-medium rounded-lg border border-stroke-neutral-1 bg-background-neutral-primary text-foreground-neutral-primary cursor-pointer",
+                                                            disabled: is_updating,
+                                                            value: "{current_role}",
+                                                            onchange: move |evt| {
+                                                                let new_role = evt.value();
+                                                                let slug = slug.clone();
+                                                                spawn(async move {
+                                                                    updating_role.set(Some(person_id));
+                                                                    let request = UpdateRoleRequest { role: new_role };
+                                                                    let _ = update_person_role(slug, person_id, request).await;
+                                                                    people_resource.restart();
+                                                                    updating_role.set(None);
+                                                                });
+                                                            },
+                                                            for (value, label) in AVAILABLE_ROLES.iter() {
+                                                                option {
+                                                                    value: *value,
+                                                                    selected: current_role.to_lowercase() == *value,
+                                                                    "{label}"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                // Just show role badge for non-admins
+                                                span { class: "px-3 py-1 text-xs font-semibold leading-4 rounded-full bg-background-neutral-secondary-enabled text-foreground-neutral-primary",
+                                                    "{format_role(&person.role)}"
+                                                }
+                                            }
+
+                                            // View button
+                                            {
+                                                let person = person.clone();
+                                                rsx! {
+                                                    button {
+                                                        class: "px-4 py-1.5 text-sm font-semibold rounded-full bg-foreground-neutral-primary text-white cursor-pointer",
+                                                        onclick: move |_| {
+                                                            selected_person.set(Some(person.clone()));
+                                                            show_modal.set(true);
+                                                        },
+                                                        "View"
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

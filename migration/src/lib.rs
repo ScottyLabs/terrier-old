@@ -17,6 +17,12 @@ mod m20251230_172700_add_event_points;
 mod m20260103_add_event_checkins;
 mod m20260105_230608_add_project_submissions_and_prizes;
 mod m20260109_add_app_icon_and_theme;
+mod m20260118_add_judging_tables;
+mod m20260119_add_judge_feature_assignment;
+mod m20260127_000000_add_table_number_to_submission;
+mod m20260127_000001_add_prize_required_events;
+mod m20260131_add_judge_prize_track;
+mod m20260131_add_judge_walk_type;
 
 pub struct Migrator;
 
@@ -41,6 +47,12 @@ impl MigratorTrait for Migrator {
             Box::new(m20260103_add_event_checkins::Migration),
             Box::new(m20260105_230608_add_project_submissions_and_prizes::Migration),
             Box::new(m20260109_add_app_icon_and_theme::Migration),
+            Box::new(m20260118_add_judging_tables::Migration),
+            Box::new(m20260119_add_judge_feature_assignment::Migration),
+            Box::new(m20260127_000000_add_table_number_to_submission::Migration),
+            Box::new(m20260127_000001_add_prize_required_events::Migration),
+            Box::new(m20260131_add_judge_prize_track::Migration),
+            Box::new(m20260131_add_judge_walk_type::Migration),
         ]
     }
 }

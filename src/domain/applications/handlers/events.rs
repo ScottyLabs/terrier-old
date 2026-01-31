@@ -176,6 +176,7 @@ pub async fn create_event(
         points: inserted.points,
         checkin_type: inserted.checkin_type,
         is_checked_in: false,
+        required_for_prizes: Vec::new(),
     })
 }
 
@@ -304,6 +305,7 @@ pub async fn update_event(
         points: updated.points,
         checkin_type: updated.checkin_type,
         is_checked_in: false,
+        required_for_prizes: Vec::new(),
     })
 }
 
