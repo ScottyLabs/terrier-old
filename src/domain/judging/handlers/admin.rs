@@ -29,9 +29,11 @@ pub async fn get_prize_track_results(
     slug: String,
     prize_id: i32,
 ) -> Result<PrizeTrackResults, ServerFnError> {
-    use crate::entities::{feature, prize, prize_feature_weight, submission, teams};
+    use crate::entities::{
+        feature, prize, prize_feature_weight, prize_track_entry, submission, teams,
+    };
     use rand::Rng;
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 
     let ctx = RequestContext::extract(&user)
         .await?
@@ -46,6 +48,16 @@ pub async fn get_prize_track_results(
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to fetch prize: {}", e)))?
         .ok_or_else(|| ServerFnError::new("Prize not found"))?;
+
+    // Get valid submission IDs for this prize track
+    let valid_submission_ids: Vec<i32> = prize_track_entry::Entity::find()
+        .filter(prize_track_entry::Column::PrizeId.eq(prize_id))
+        .select_only()
+        .column(prize_track_entry::Column::SubmissionId)
+        .into_tuple()
+        .all(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch entries: {}", e)))?;
 
     // Get all features for this hackathon
     let features = feature::Entity::find()
@@ -83,13 +95,13 @@ pub async fn get_prize_track_results(
         .map(|t| t.id)
         .collect();
 
-    // Get all submissions for these teams
+    // Get all submissions for these teams AND in the prize track
     let submissions = submission::Entity::find()
         .filter(submission::Column::TeamId.is_in(team_ids.clone()))
+        .filter(submission::Column::Id.is_in(valid_submission_ids))
         .all(&ctx.state.db)
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to fetch submissions: {}", e)))?;
-
     // Get team info for each submission
     let teams_list = teams::Entity::find()
         .filter(teams::Column::HackathonId.eq(hackathon.id))
@@ -386,14 +398,11 @@ pub async fn generate_ai_summary(
     };
 
     let prompt = format!(
-        "You are summarizing a hackathon project for judges and organizers. \
+        "You are summarizing notes on a hackathon project for judges. \
          Be concise but informative. Focus on the key aspects and any feedback from judges.\n\n\
-         Project Name: {}\n\
-         Team Name: {}\n\n\
-         Project Description:\n{}\n\n\
          Judge Notes:\n{}\n\n\
-         Please provide a brief summary (2-3 sentences) of this project and the key points from the judge feedback.",
-        project_name, team.name, description, notes_text
+         Please provide a brief summary (2-3 sentences) of the key points from the judge feedback.",
+        notes_text
     );
 
     // Call OpenRouter API
@@ -403,7 +412,7 @@ pub async fn generate_ai_summary(
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .json(&serde_json::json!({
-            "model": "openai/gpt-4o-mini",
+            "model": "google/gemini-3-flash-preview",
             "messages": [
                 {
                     "role": "user",
@@ -509,7 +518,7 @@ pub async fn get_prizes_with_judges(slug: String) -> Result<Vec<PrizeWithJudges>
                 name: p.name,
                 description: p.description,
             },
-            is_default: assignments.is_empty(),
+            is_default: false, // Deprecated: implicit default tracks are removed
             judges,
         });
     }
@@ -614,26 +623,27 @@ pub async fn unassign_prize_judge(
     Ok(())
 }
 
-/// Make a prize track "default" (remove all judge assignments - all judges can judge)
+/// Assign ALL judges to a prize track
 #[cfg_attr(feature = "server", utoipa::path(
-    delete,
-    path = "/api/hackathons/{slug}/judging/prizes/{prize_id}/judges",
+    post,
+    path = "/api/hackathons/{slug}/judging/prizes/{prize_id}/judges/all",
     params(
         ("slug" = String, Path, description = "Hackathon slug"),
         ("prize_id" = i32, Path, description = "Prize track ID")
     ),
     responses(
-        (status = 200, description = "Prize track made default"),
+        (status = 200, description = "All judges assigned"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden"),
         (status = 500, description = "Server error")
     ),
     tag = "judging"
 ))]
-#[delete("/api/hackathons/:slug/judging/prizes/:prize_id/judges", user: SyncedUser)]
-pub async fn make_prize_default(slug: String, prize_id: i32) -> Result<(), ServerFnError> {
-    use crate::entities::judge_prize_track;
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+#[post("/api/hackathons/:slug/judging/prizes/:prize_id/judges/all", user: SyncedUser)]
+pub async fn assign_all_judges(slug: String, prize_id: i32) -> Result<(), ServerFnError> {
+    use crate::domain::people::handlers::query::get_hackathon_people;
+    use crate::entities::{judge_prize_track, users};
+    use sea_orm::{ActiveModelTrait, ActiveValue::NotSet, Set};
 
     let ctx = RequestContext::extract(&user)
         .await?
@@ -642,11 +652,26 @@ pub async fn make_prize_default(slug: String, prize_id: i32) -> Result<(), Serve
 
     Permissions::require_admin_or_organizer(&ctx).await?;
 
-    judge_prize_track::Entity::delete_many()
-        .filter(judge_prize_track::Column::PrizeId.eq(prize_id))
-        .exec(&ctx.state.db)
-        .await
-        .map_err(|e| ServerFnError::new(format!("Failed to clear assignments: {}", e)))?;
+    // Get all people in the hackathon
+    let people = get_hackathon_people(slug).await?;
+
+    // Assign each person to the prize track
+    for person in people {
+        let new_assignment = judge_prize_track::ActiveModel {
+            id: NotSet,
+            judge_id: Set(person.user_id),
+            prize_id: Set(prize_id),
+            created_at: Set(chrono::Utc::now().naive_utc()),
+        };
+
+        // Use insert, ignoring conflicts (if already assigned, it will fail but we catch it?
+        // actually existing code used insert and ignored result.
+        // But sea_orm insert might return error on unique constraint.
+        // The previous `assign_prize_judges` did: `let _ = new_assignment.insert(&ctx.state.db).await;`
+        // We should do the same or check existence first.
+        // For bulk, maybe we should be more careful, but `let _` is fine for now as it just ignores errors (like duplicates).
+        let _ = new_assignment.insert(&ctx.state.db).await;
+    }
 
     Ok(())
 }

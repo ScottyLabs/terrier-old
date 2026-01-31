@@ -7,6 +7,7 @@ use crate::{
         judging::{
             handlers::{
                 complete_visit, get_unified_state, request_next_project, submit_comparisons,
+                toggle_prize_assignment,
             },
             types::{
                 CompleteVisitRequest, CurrentProject, FeatureComparison, JudgeFeatureState,
@@ -321,19 +322,21 @@ pub fn HackathonJudge(slug: String) -> Element {
                     }
                 }
 
-                if s.assigned_prizes.is_empty() {
-                    // No prizes assigned
-                    div { class: "p-6 bg-background-neutral-tertiary-enabled rounded-lg text-center",
-                        p { class: "text-foreground-neutral-secondary",
-                            "You haven't been assigned to any prizes yet. Please contact an organizer."
-                        }
+                if let Some(msg) = success_msg.read().as_ref() {
+                    div { class: "mb-4 p-4 bg-background-success-secondary rounded-lg",
+                        p { class: "text-foreground-success-primary", "{msg}" }
                     }
-                } else if s.current_project.is_none() {
-                    // Pre-judging state - show assigned prizes
+                }
+
+                if s.current_project.is_none() {
+                    // Pre-judging state - show assigned prizes and allow selection
                     PreJudgingView {
-                        prizes: s.assigned_prizes.clone(),
+                        assigned_prizes: s.assigned_prizes.clone(),
+                        all_prizes: s.all_prizes.clone(),
                         loading: *loading.read(),
+                        slug: slug.clone(),
                         on_start: start_judging,
+                        state_setter: state,
                     }
                 } else if let Some(ref project) = s.current_project {
                     // In-progress state
@@ -362,56 +365,110 @@ pub fn HackathonJudge(slug: String) -> Element {
 
 /// Pre-judging view showing assigned prizes
 #[component]
-fn PreJudgingView(prizes: Vec<PrizeInfo>, loading: bool, on_start: EventHandler<()>) -> Element {
+fn PreJudgingView(
+    assigned_prizes: Vec<PrizeInfo>,
+    all_prizes: Vec<PrizeInfo>,
+    loading: bool,
+    slug: String,
+    on_start: EventHandler<()>,
+    state_setter: Signal<Option<UnifiedJudgingState>>,
+) -> Element {
+    let assigned_ids: std::collections::HashSet<i32> =
+        assigned_prizes.iter().map(|p| p.id).collect();
+
     rsx! {
-        div { class: "max-w-6xl mx-auto",
-            h1 { class: "text-2xl font-semibold text-foreground-neutral-primary mb-6",
-                "Judging"
+        div { class: "max-w-6xl mx-auto pt-6",
+            div { class: "mb-8 text-center",
+                h1 { class: "text-3xl font-semibold text-foreground-neutral-primary mb-2",
+                    "Welcome, Judge!"
+                }
+                p { class: "text-lg text-foreground-neutral-secondary",
+                    "Please select the prize tracks you are judging today."
+                }
             }
 
-            p { class: "text-foreground-neutral-secondary mb-6",
-                "You are judging the following prizes:"
-            }
+            if all_prizes.is_empty() {
+                div { class: "p-12 text-center bg-background-neutral-secondary-enabled rounded-xl border border-dashed border-stroke-neutral-2",
+                    p { class: "text-foreground-neutral-secondary", "No prize tracks found for this hackathon." }
+                }
+            } else {
+                div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-10",
+                    for prize in all_prizes.iter() {
+                        {
+                            let is_assigned = assigned_ids.contains(&prize.id);
+                            let prize_id = prize.id;
+                            let slug = slug.clone();
+                            let mut state_setter = state_setter.clone();
 
-            div { class: "grid grid-cols-1 md:grid-cols-3 gap-4 mb-8",
-                for (i, prize) in prizes.iter().enumerate() {
-                    div {
-                        key: "{prize.id}",
-                        class: "p-4 {PRIZE_COLORS[i % PRIZE_COLORS.len()]} rounded-lg flex items-center justify-between",
-                        div {
-                            p { class: "font-medium text-foreground-neutral-primary",
-                                "{prize.name}"
-                            }
-                            if let Some(desc) = &prize.description {
-                                p { class: "text-sm text-foreground-neutral-secondary mt-1",
-                                    "{desc}"
+                            let card_class = if is_assigned {
+                                "relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 border-stroke-brand-primary bg-background-brand-primary-enabled"
+                            } else {
+                                "relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 border-stroke-neutral-1 bg-background-neutral-primary hover:border-stroke-neutral-2"
+                            };
+
+                            let check_class = if is_assigned {
+                                "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors bg-foreground-brand-primary border-foreground-brand-primary"
+                            } else {
+                                "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors border-stroke-neutral-2 bg-transparent"
+                            };
+
+                            rsx! {
+                                div {
+                                    key: "{prize.id}",
+                                    class: "{card_class}",
+                                    onclick: move |_| {
+                                        let slug = slug.clone();
+                                        spawn(async move {
+                                            // Optimistic update would be nice, but simple toggle request is safer
+                                            if toggle_prize_assignment(slug.clone(), prize_id).await.is_ok() {
+                                                if let Ok(new_state) = get_unified_state(slug).await {
+                                                    state_setter.set(Some(new_state));
+                                                }
+                                            }
+                                        });
+                                    },
+                                    div { class: "flex items-start justify-between gap-3",
+                                        div {
+                                            h3 { class: "font-medium text-foreground-neutral-primary text-lg",
+                                                "{prize.name}"
+                                            }
+                                            if let Some(desc) = &prize.description {
+                                                p { class: "text-sm text-foreground-neutral-secondary mt-1",
+                                                    "{desc}"
+                                                }
+                                            }
+                                        }
+                                        div {
+                                            class: "{check_class}",
+                                            if is_assigned {
+                                                svg { class: "w-4 h-4 text-white", fill: "none", stroke: "currentColor", view_box: "0 0 24 24",
+                                                    path { stroke_linecap: "round", stroke_linejoin: "round", stroke_width: "3", d: "M5 13l4 4L19 7" }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                        // Checkbox icon
-                        svg {
-                            class: "w-5 h-5 text-foreground-neutral-secondary",
-                            fill: "none",
-                            stroke: "currentColor",
-                            view_box: "0 0 24 24",
-                            path {
-                                stroke_linecap: "round",
-                                stroke_linejoin: "round",
-                                stroke_width: "2",
-                                d: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
                             }
                         }
                     }
                 }
             }
 
-            div { class: "flex justify-center",
-                Button { disabled: loading, onclick: move |_| on_start.call(()),
+            div { class: "flex flex-col items-center gap-4",
+                Button {
+                    disabled: loading || assigned_prizes.is_empty(),
+                    onclick: move |_| on_start.call(()),
+                    class: "w-full max-w-md py-4 text-lg",
                     if loading {
                         "Starting..."
+                    } else if assigned_prizes.is_empty() {
+                        "Select a Prize Track to Start"
                     } else {
                         "Start Judging"
                     }
+                }
+                if assigned_prizes.is_empty() {
+                    p { class: "text-sm text-foreground-neutral-tertiary", "You must select at least one prize track to begin." }
                 }
             }
         }
@@ -443,6 +500,16 @@ fn InProgressView(
         .unwrap_or_else(|| "Unknown".to_string());
 
     let mut show_json = use_signal(|| false);
+    let mut viewed_project: Signal<Option<JudgeFeatureState>> = use_signal(|| None);
+
+    if let Some(feature) = viewed_project.read().clone() {
+        return rsx! {
+            ProjectInfoModal {
+                feature: feature,
+                on_close: move |_| viewed_project.set(None),
+            }
+        };
+    }
 
     rsx! {
         div {
@@ -507,6 +574,7 @@ fn InProgressView(
                         selections: selections.clone(),
                         feature_notes: feature_notes.clone(),
                         expanded_cards: expanded_cards.clone(),
+                        on_view_project: move |f| viewed_project.set(Some(f)),
                     }
                 }
             }
@@ -559,6 +627,7 @@ fn PrizeCard(
     mut selections: Signal<std::collections::HashMap<i32, i32>>,
     mut feature_notes: Signal<std::collections::HashMap<i32, String>>,
     mut expanded_cards: Signal<std::collections::HashSet<i32>>,
+    on_view_project: EventHandler<JudgeFeatureState>,
 ) -> Element {
     let feature_id = feature.feature_id;
     let current_submission_id = current_project.submission_id;
@@ -640,7 +709,9 @@ fn PrizeCard(
                             span { class: "text-sm text-foreground-neutral-secondary",
                                 "Project to Compare: "
                             }
-                            span { class: "font-medium text-foreground-neutral-primary",
+                            button {
+                                class: "font-medium text-foreground-brand-primary hover:underline",
+                                onclick: move |_| on_view_project.call(feature.clone()),
                                 "{best_team_name}"
                             }
                         }
@@ -736,6 +807,71 @@ fn PrizeCard(
                                 feature_notes.write().insert(feature_id, e.value().clone());
                             },
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn ProjectInfoModal(feature: JudgeFeatureState, on_close: EventHandler<()>) -> Element {
+    let team_name = feature.current_best_team_name.clone().unwrap_or_default();
+    let description = feature.current_best_description.clone().unwrap_or_default();
+    let table = feature
+        .current_best_table_number
+        .clone()
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    rsx! {
+        div { class: "fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm",
+            div { class: "bg-background-neutral-primary rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto",
+                // Header
+                div { class: "flex items-center justify-between p-6 border-b border-border-neutral-secondary",
+                    h2 { class: "text-xl font-semibold text-foreground-neutral-primary",
+                        "Project Details"
+                    }
+                    button {
+                        class: "text-foreground-neutral-secondary hover:text-foreground-neutral-primary p-2",
+                        onclick: move |_| on_close.call(()),
+                        svg {
+                            class: "w-5 h-5",
+                            fill: "none",
+                            stroke: "currentColor",
+                            view_box: "0 0 24 24",
+                            path {
+                                stroke_linecap: "round",
+                                stroke_linejoin: "round",
+                                stroke_width: "2",
+                                d: "M6 18L18 6M6 6l12 12",
+                            }
+                        }
+                    }
+                }
+
+                // Content
+                div { class: "p-6 space-y-6",
+                    div {
+                        h3 { class: "text-sm text-foreground-neutral-secondary mb-1", "Team" }
+                        p { class: "text-lg font-medium text-foreground-neutral-primary", "{team_name}" }
+                    }
+
+                    div {
+                        h3 { class: "text-sm text-foreground-neutral-secondary mb-1", "Table" }
+                        p { class: "text-lg font-medium text-foreground-neutral-primary", "{table}" }
+                    }
+
+                    div {
+                        h3 { class: "text-sm text-foreground-neutral-secondary mb-1", "Description" }
+                        p { class: "text-base text-foreground-neutral-primary whitespace-pre-wrap", "{description}" }
+                    }
+                }
+
+                // Footer
+                div { class: "p-6 border-t border-border-neutral-secondary bg-background-neutral-secondary-enabled rounded-b-xl flex justify-end",
+                    Button {
+                        onclick: move |_| on_close.call(()),
+                        "Close"
                     }
                 }
             }

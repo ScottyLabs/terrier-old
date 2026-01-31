@@ -10,8 +10,8 @@ use crate::{
         hackathons::types::HackathonInfo,
         judging::{
             handlers::{
-                assign_prize_judges, close_submissions, create_feature, delete_feature,
-                get_features, get_judging_status, get_prizes_with_judges, make_prize_default,
+                assign_all_judges, assign_prize_judges, close_submissions, create_feature,
+                delete_feature, get_features, get_judging_status, get_prizes_with_judges,
                 recalculate_rankings, reopen_submissions, reset_judging, start_judging,
                 stop_judging, unassign_prize_judge, update_feature,
             },
@@ -1087,33 +1087,34 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                                 }
                                             }
 
-                                            if !selected_prize_judges.read().is_empty() {
-                                                {
-                                                    let slug = slug.clone();
-                                                    let refresh = refresh.clone();
-                                                    rsx! {
-                                                        div { class: "mt-4 pt-4 border-t border-stroke-neutral-1",
-                                                            Button {
-                                                                variant: ButtonVariant::Secondary,
-                                                                onclick: move |_| {
-                                                                    let slug = slug.clone();
-                                                                    let refresh = refresh.clone();
-                                                                    let prize_id = selected_prize.read().as_ref().map(|p| p.id).unwrap_or_default();
-                                                                    spawn(async move {
-                                                                        if make_prize_default(slug.clone(), prize_id).await.is_ok() {
-                                                                            refresh();
-                                                                            selected_prize_judges.set(Vec::new());
-                                                                            if let Ok(p) = get_prizes_with_judges(slug).await {
-                                                                                prizes_with_judges.set(p);
-                                                                            }
-                                                                        }
-                                                                    });
-                                                                },
-                                                                "Make Default (All Judges)"
+
+
+                                            div { class: "mt-4 pt-4 border-t border-stroke-neutral-1",
+                                                Button {
+                                                    variant: ButtonVariant::Secondary,
+                                                    onclick: move |_| {
+                                                        let slug = slug.clone();
+                                                        let refresh = refresh.clone();
+                                                        let prize_id = selected_prize.read().as_ref().map(|p| p.id).unwrap_or_default();
+                                                        let price_id_copy = prize_id;
+                                                        spawn(async move {
+                                                            if assign_all_judges(slug.clone(), price_id_copy).await.is_ok() {
+                                                                refresh();
+                                                                if let Ok(p) = get_prizes_with_judges(slug).await {
+                                                                    prizes_with_judges.set(p.clone());
+                                                                        let judges = p
+                                                                        .iter()
+                                                                        .find(|pwj| pwj.prize.id == price_id_copy)
+                                                                        .map(|pwj| pwj.judges.clone())
+                                                                        .unwrap_or_default();
+                                                                    selected_prize_judges.set(judges);
+                                                                }
                                                             }
-                                                        }
-                                                    }
+                                                        });
+                                                    },
+                                                    "Assign All Judges"
                                                 }
+
                                             }
                                         }
                                     }

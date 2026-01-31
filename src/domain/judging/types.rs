@@ -138,6 +138,7 @@ pub struct JudgeFeatureState {
     pub current_best_submission_id: Option<i32>,
     pub current_best_team_name: Option<String>,
     pub current_best_description: Option<String>,
+    pub current_best_table_number: Option<String>,
     pub notes: Option<String>,
 }
 
@@ -148,6 +149,7 @@ pub struct UnifiedJudgingState {
     pub current_project: Option<CurrentProject>,
     pub features: Vec<JudgeFeatureState>,
     pub assigned_prizes: Vec<PrizeInfo>,
+    pub all_prizes: Vec<PrizeInfo>,
     pub judging_started: bool,
 }
 

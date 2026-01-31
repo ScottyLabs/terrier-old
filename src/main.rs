@@ -130,6 +130,10 @@ pub enum Route {
                 HackathonResults {
                     slug: String
                 },
+            #[route("/mock-expo")]
+                HackathonMockExpo {
+                    slug: String
+                },
         #[end_layout]
     #[end_nest]
     #[route("/:..route")]

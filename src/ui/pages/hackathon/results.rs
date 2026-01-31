@@ -132,14 +132,10 @@ pub fn HackathonResults(slug: String) -> Element {
                                 }
                             },
                             Some(Some(_)) => rsx! {
-                                div { class: "px-4 py-2 text-foreground-neutral-secondary",
-                                    "No prizes available"
-                                }
+                                div { class: "px-4 py-2 text-foreground-neutral-secondary", "No prizes available" }
                             },
                             _ => rsx! {
-                                div { class: "px-4 py-2 text-foreground-neutral-secondary",
-                                    "Loading..."
-                                }
+                                div { class: "px-4 py-2 text-foreground-neutral-secondary", "Loading..." }
                             },
                         }
                     }
@@ -159,9 +155,7 @@ pub fn HackathonResults(slug: String) -> Element {
                             }
                         },
                         Some(None) if selected_prize_id().is_some() => rsx! {
-                            p { class: "text-foreground-neutral-secondary text-center py-8",
-                                "Failed to load results"
-                            }
+                            p { class: "text-foreground-neutral-secondary text-center py-8", "Failed to load results" }
                         },
                         _ => rsx! {
                             p { class: "text-foreground-neutral-secondary text-center py-8",
@@ -206,7 +200,9 @@ fn ResultsTable(
                         }
                         th { class: "text-left py-3 px-2 text-sm font-semibold text-foreground-neutral-primary",
                             "Score"
-                            span { class: "ml-1 text-xs text-foreground-neutral-tertiary", "ⓘ" }
+                            span { class: "ml-1 text-xs text-foreground-neutral-tertiary",
+                                "ⓘ"
+                            }
                         }
                         // Dynamic feature columns
                         for feature in results.features.iter() {
@@ -239,16 +235,14 @@ fn ResultsTable(
                                         td { class: "py-3 px-2 text-sm text-foreground-neutral-primary",
                                             {project.project_name.clone().unwrap_or_else(|| "Untitled".to_string())}
                                         }
-                                        td { class: "py-3 px-2 text-sm text-foreground-neutral-primary",
-                                            "{project.team_name}"
-                                        }
+                                        // Feature rank columns
+                                        td { class: "py-3 px-2 text-sm text-foreground-neutral-primary", "{project.team_name}" }
                                         td { class: "py-3 px-2 text-sm text-foreground-neutral-primary font-mono",
                                             {project.table_number.clone().unwrap_or_else(|| "-".to_string())}
                                         }
                                         td { class: "py-3 px-2 text-sm text-foreground-neutral-primary",
                                             {format!("{:.2}", project.weighted_score.unwrap_or(0.0))}
                                         }
-                                        // Feature rank columns
                                         for rank_info in project.feature_ranks.iter() {
                                             td {
                                                 key: "{rank_info.feature_id}",
@@ -301,10 +295,7 @@ fn ProjectDetailModal(
     };
 
     rsx! {
-        ModalBase {
-            on_close: on_close,
-            width: "500px",
-            max_height: "90vh",
+        ModalBase { on_close, width: "500px", max_height: "90vh",
 
             div { class: "px-7 pb-7",
                 // Project name with copy icon
@@ -327,7 +318,12 @@ fn ProjectDetailModal(
                 // Description box
                 div { class: "bg-background-neutral-secondary rounded-lg p-4 mb-4",
                     p { class: "text-sm text-foreground-neutral-secondary",
-                        {project.description.clone().unwrap_or_else(|| "No description provided.".to_string())}
+                        {
+                            project
+                                .description
+                                .clone()
+                                .unwrap_or_else(|| "No description provided.".to_string())
+                        }
                     }
                 }
 
@@ -389,11 +385,16 @@ fn ProjectDetailModal(
                             "AI Summary"
                         }
                         button {
-                            class: "flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full bg-foreground-brand-primary text-white hover:bg-foreground-brand-secondary transition-colors disabled:opacity-50",
+                            class: "flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full bg-foreground-brand-primary text-black hover:bg-foreground-brand-secondary transition-colors disabled:opacity-50",
                             disabled: loading_summary(),
                             onclick: do_generate_summary,
                             if loading_summary() {
-                                Icon { width: 14, height: 14, icon: LdLoader, class: "animate-spin" }
+                                Icon {
+                                    width: 14,
+                                    height: 14,
+                                    icon: LdLoader,
+                                    class: "animate-spin",
+                                }
                                 "Generating..."
                             } else {
                                 Icon { width: 14, height: 14, icon: LdSparkles }
@@ -460,7 +461,12 @@ fn ProjectDetailModal(
                         }
                         span { class: "text-sm text-foreground-neutral-secondary",
                             "Score: "
-                            {project.weighted_score.map(|s| format!("{:.2}", s)).unwrap_or_else(|| "-".to_string())}
+                            {
+                                project
+                                    .weighted_score
+                                    .map(|s| format!("{:.2}", s))
+                                    .unwrap_or_else(|| "-".to_string())
+                            }
                         }
                     }
                 }
