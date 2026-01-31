@@ -18,12 +18,13 @@ Terrier uses [devenv](https://devenv.sh) for development environment management,
     curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
     ```
 
-    Follow https://github.com/nix-darwin/nix-darwin to install nix-darwin, which the rest of this doc uses.
+    Follow https://github.com/nix-darwin/nix-darwin to install nix-darwin (for macOS), which the rest of this doc uses.
     Then run the below to update when you make a change to the flake:
+
     ```bash
     sudo darwin-rebuild switch --flake /etc/nix-darwin
     ```
-    
+
     Or see [nixos.org/download](https://nixos.org/download/) for other options, including for WSL.
 
 2. [devenv](https://devenv.sh/) (development environment manager)

@@ -598,6 +598,8 @@ fn EventCategorySection(
 #[component]
 fn EventDetailPanel(slug: String, event: ScheduleEvent, on_refresh: EventHandler<()>) -> Element {
     let slug_for_attendees = slug.clone();
+    let slug_for_scanner = slug.clone();
+    let nav = use_navigator();
     let event_id = event.id;
 
     // Participant ID input
@@ -610,6 +612,7 @@ fn EventDetailPanel(slug: String, event: ScheduleEvent, on_refresh: EventHandler
     // Confirmation modal state
     let mut pending_participant: Signal<Option<ParticipantInfo>> = use_signal(|| None);
     let mut is_confirming = use_signal(|| false);
+    let mut show_scanner_modal = use_signal(|| false);
     let mut error_message: Signal<Option<String>> = use_signal(|| None);
     let mut skip_confirmation = use_signal(|| {
         // Check localStorage for skip preference
@@ -814,6 +817,26 @@ fn EventDetailPanel(slug: String, event: ScheduleEvent, on_refresh: EventHandler
                         }
                     }
                 }
+            }
+        }
+
+        // Scanner Modal
+        if show_scanner_modal() {
+            QRModal {
+                // Props for QRModal (dummy values for scanner mode)
+                qr_svg: String::new(),
+                user_id: 0,
+                on_close: move |_| show_scanner_modal.set(false),
+                on_scan: move |scanned_id: String| {
+                    let slug = slug_for_scanner.clone();
+                    show_scanner_modal.set(false);
+                    if let Ok(user_id) = scanned_id.parse::<i32>() {
+                        nav.push(Route::HackathonScan {
+                            slug: slug.clone(),
+                            user_id,
+                        });
+                    }
+                },
             }
         }
 

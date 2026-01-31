@@ -2,7 +2,7 @@
   description = "Terrier";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/4d2b249a94fd32c0d09046c37e80b83a1c5cb1fc";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     devenv.url = "github:cachix/devenv";
 
     rust-overlay.url = "github:oxalica/rust-overlay";

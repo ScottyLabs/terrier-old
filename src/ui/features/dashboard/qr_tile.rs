@@ -85,28 +85,125 @@ fn QRDisplay(qr_svg: String, user_id: i32) -> Element {
 
 /// Fullscreen QR code modal
 #[component]
-pub fn QRModal(qr_svg: String, user_id: i32, on_close: EventHandler<()>) -> Element {
+pub fn QRModal(
+    qr_svg: String,
+    user_id: i32,
+    on_close: EventHandler<()>,
+    on_scan: Option<EventHandler<String>>,
+) -> Element {
+    let show_scanner = on_scan.is_some();
+
     rsx! {
         // Backdrop - covers entire screen with semi-transparent grey
         div {
             class: "fixed inset-0 flex items-center justify-center z-50",
             style: "background-color: rgba(0, 0, 0, 0.7);",
-            onclick: move |_| on_close.call(()),
+            onclick: move |_| {
+                // Attempt to stop scanner JS
+                if show_scanner {
+                    let mut eval = document::eval("if (window.stopQrScanner) window.stopQrScanner();");
+                    // We don't need to wait for it
+                }
+                on_close.call(());
+            },
 
-            // Modal content - centered QR code
+            // Modal content - centered QR code or scanner
             div {
                 class: "relative flex flex-col items-center justify-center",
                 onclick: move |e| e.stop_propagation(),
 
-                // Large QR code display
-                div { class: "w-[95vmin] h-[95vmin] max-w-[500px] max-h-[500px] flex flex-col items-center justify-center gap-4",
-                    div {
-                        class: "w-full h-full bg-background-neutral-primary rounded-2xl",
-                        dangerous_inner_html: "{qr_svg}",
+                // Display Area
+                div { class: "w-[95vmin] h-[95vmin] max-w-[500px] max-h-[500px] flex flex-col items-center justify-center gap-4 bg-background-neutral-primary rounded-2xl p-4",
+                    if let Some(handler) = on_scan {
+                        Scanner { on_scan: handler }
+                    } else {
+                        div {
+                            class: "w-full h-full bg-background-neutral-primary rounded-2xl",
+                            dangerous_inner_html: "{qr_svg}",
+                        }
+                        div { class: "text-white font-semibold text-lg", "User ID: {user_id}" }
                     }
-                    div { class: "text-white font-semibold text-lg", "User ID: {user_id}" }
                 }
             }
+        }
+    }
+}
+
+#[component]
+fn Scanner(on_scan: EventHandler<String>) -> Element {
+    // Use eval to initialize the scanner
+    // We use use_future to run this once on mount
+    let mut eval = document::eval(
+        r#"
+        const scanHandler = await dioxus.recv();
+        
+        function onScanSuccess(decodedText, decodedResult) {
+
+            // Check if URL matches our expected format
+            if (decodedText.includes("/scan/")) {
+                const parts = decodedText.split("/scan/");
+                if (parts.length === 2) {
+                    const userId = parts[1];
+                    
+                    // Stop scanning immediately
+                    if (window.html5QrcodeScanner) {
+                        window.html5QrcodeScanner.clear().then(() => {
+                            // Send back to Rust after clearing
+                            dioxus.send(userId);
+                        }).catch(err => {
+                            console.error("Failed to clear scanner", err);
+                            dioxus.send(userId);
+                        });
+                    } else {
+                        dioxus.send(userId);
+                    }
+                }
+            }
+        }
+
+        function onScanFailure(error) {
+            // handle scan failure
+        }
+        
+        window.stopQrScanner = function() {
+             if (window.html5QrcodeScanner) {
+                window.html5QrcodeScanner.clear();
+             }
+        };
+
+        setTimeout(() => {
+            if (document.getElementById('reader')) {
+                window.html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader",
+                { fps: 10, qrbox: {width: 250, height: 250} },
+                false);
+                window.html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+            }
+        }, 100);
+        "#,
+    );
+
+    // Handle scan result
+    use_future(move || {
+        let mut eval = eval.clone();
+        let scan_handler = on_scan.clone();
+        async move {
+            eval.send(true).unwrap(); // Start the script
+            if let Ok(scanned_user_id) = eval.recv::<String>().await {
+                scan_handler.call(scanned_user_id);
+            }
+        }
+    });
+
+    rsx! {
+        div { class: "w-full text-center text-lg font-semibold mb-2", "Scan Participant QR" }
+        div {
+            id: "reader",
+            class: "w-full bg-black rounded-xl overflow-hidden shadow-lg border border-gray-800",
+            style: "min-height: 300px;"
+        }
+        div { class: "text-sm text-foreground-neutral-secondary text-center mt-2",
+            "Point camera at a check-in QR Code"
         }
     }
 }
