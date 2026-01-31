@@ -20,3 +20,16 @@ result-*
 # Android
 .android
 local.properties
+
+*.keystore
+*.jks
+
+*.apk
+*.aab
+*.idsig
+
+.gradle/
+build/
+app/build/
+
+local.properties
