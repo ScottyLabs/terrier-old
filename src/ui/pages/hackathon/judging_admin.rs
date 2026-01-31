@@ -415,7 +415,7 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
 
             // Status panel
             if let Some(s) = status.read().as_ref() {
-                div { class: "mb-8 p-9 bg-background-neutral-primary rounded-[20px]",
+                div { class: "mb-8 p-6 bg-background-neutral-primary rounded-[20px]",
                     h2 { class: "text-xl font-semibold text-foreground-neutral-primary mb-4",
                         "Judging Status"
                     }
@@ -601,7 +601,7 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                     }
                 }
             } else {
-                div { class: "mb-8 p-9 bg-background-neutral-primary rounded-[20px]",
+                div { class: "mb-8 p-6 bg-background-neutral-primary rounded-[20px]",
                     p { class: "text-foreground-neutral-secondary", "Loading status..." }
                 }
             }
@@ -611,7 +611,7 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                 div { class: "flex flex-col lg:flex-row gap-6",
                     // Left: Feature cards
                     div { class: "flex-1",
-                        div { class: "p-9 bg-background-neutral-primary rounded-[20px]",
+                        div { class: "p-6 bg-background-neutral-primary rounded-[20px]",
                             h2 { class: "text-xl font-semibold text-foreground-neutral-primary mb-4",
                                 "Judging Features"
                             }
@@ -637,31 +637,6 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                                     class: "p-6 border rounded-lg cursor-pointer transition-colors",
                                                     class: if is_selected { "border-foreground-neutral-primary bg-background-neutral-secondary-enabled" } else { "border-stroke-neutral-1 hover:border-stroke-neutral-2" },
                                                     onclick: move |_| select_feature(feature_clone.clone()),
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
                                                     div { class: "flex items-center justify-between mb-2",
                                                         h3 { class: "font-semibold text-lg text-foreground-neutral-primary", "{feature.name}" }
                                                         span { class: "px-3 py-1 text-xs font-semibold rounded-full bg-foreground-neutral-primary text-white",
@@ -766,7 +741,7 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                     div { class: "flex flex-col lg:flex-row gap-6",
                         // Left: Prize track list
                         div { class: "flex-1",
-                            div { class: "p-9 bg-background-neutral-primary rounded-[20px]",
+                            div { class: "p-6 bg-background-neutral-primary rounded-[20px]",
                                 h2 { class: "text-xl font-semibold text-foreground-neutral-primary mb-4",
                                     "Prize Track Judges"
                                 }

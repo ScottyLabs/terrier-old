@@ -6,12 +6,12 @@ use crate::{
         hackathons::types::HackathonInfo,
         judging::{
             handlers::{
-                complete_visit, get_unified_state, request_next_project, submit_comparisons,
-                toggle_prize_assignment,
+                complete_visit, get_unified_state, request_next_project, set_walk_type,
+                submit_comparisons, toggle_prize_assignment,
             },
             types::{
                 CompleteVisitRequest, CurrentProject, FeatureComparison, JudgeFeatureState,
-                PrizeInfo, SubmitComparisonsRequest, UnifiedJudgingState,
+                PrizeInfo, SubmitComparisonsRequest, UnifiedJudgingState, WalkType,
             },
         },
     },
@@ -297,15 +297,8 @@ pub fn HackathonJudge(slug: String) -> Element {
     let current_state = state.read().clone();
 
     rsx! {
-        div { class: "pt-6 pb-7",
-            // Check if judging is active
-            if !hackathon_info.judging_started {
-                div { class: "p-6 bg-background-warning-secondary rounded-lg",
-                    p { class: "text-foreground-warning-primary font-medium",
-                        "Judging has not started yet. Please wait for the organizers to begin the judging period."
-                    }
-                }
-            } else if *loading.read() && current_state.is_none() {
+        div { class: "pt-11 pb-7",
+            if *loading.read() && current_state.is_none() {
                 div { class: "flex items-center justify-center py-12",
                     p { class: "text-foreground-neutral-secondary", "Loading..." }
                 }
@@ -321,22 +314,17 @@ pub fn HackathonJudge(slug: String) -> Element {
                         p { class: "text-foreground-success-primary", "{msg}" }
                     }
                 }
-
-                if let Some(msg) = success_msg.read().as_ref() {
-                    div { class: "mb-4 p-4 bg-background-success-secondary rounded-lg",
-                        p { class: "text-foreground-success-primary", "{msg}" }
-                    }
-                }
-
                 if s.current_project.is_none() {
                     // Pre-judging state - show assigned prizes and allow selection
                     PreJudgingView {
                         assigned_prizes: s.assigned_prizes.clone(),
                         all_prizes: s.all_prizes.clone(),
+                        walk_type: s.walk_type.clone(),
                         loading: *loading.read(),
                         slug: slug.clone(),
                         on_start: start_judging,
                         state_setter: state,
+                        judging_started: hackathon_info.judging_started,
                     }
                 } else if let Some(ref project) = s.current_project {
                     // In-progress state
@@ -368,10 +356,12 @@ pub fn HackathonJudge(slug: String) -> Element {
 fn PreJudgingView(
     assigned_prizes: Vec<PrizeInfo>,
     all_prizes: Vec<PrizeInfo>,
+    walk_type: WalkType,
     loading: bool,
     slug: String,
     on_start: EventHandler<()>,
     state_setter: Signal<Option<UnifiedJudgingState>>,
+    judging_started: bool,
 ) -> Element {
     let assigned_ids: std::collections::HashSet<i32> =
         assigned_prizes.iter().map(|p| p.id).collect();
@@ -388,11 +378,13 @@ fn PreJudgingView(
             }
 
             if all_prizes.is_empty() {
-                div { class: "p-12 text-center bg-background-neutral-secondary-enabled rounded-xl border border-dashed border-stroke-neutral-2",
-                    p { class: "text-foreground-neutral-secondary", "No prize tracks found for this hackathon." }
+                div { class: "mb-8 p-12 text-center bg-background-neutral-secondary-enabled rounded-xl border border-dashed border-stroke-neutral-2",
+                    p { class: "text-foreground-neutral-secondary",
+                        "No prize tracks found for this hackathon."
+                    }
                 }
             } else {
-                div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-10",
+                div { class: "mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6 bg-background-neutral-secondary-enabled rounded-xl",
                     for prize in all_prizes.iter() {
                         {
                             let is_assigned = assigned_ids.contains(&prize.id);
@@ -412,6 +404,18 @@ fn PreJudgingView(
                                 "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors border-stroke-neutral-2 bg-transparent"
                             };
 
+                            let title_class = if is_assigned {
+                                "font-medium text-black text-lg"
+                            } else {
+                                "font-medium text-foreground-neutral-primary text-lg"
+                            };
+
+                            let desc_class = if is_assigned {
+                                "text-sm text-black/80 mt-1"
+                            } else {
+                                "text-sm text-foreground-neutral-secondary mt-1"
+                            };
+
                             rsx! {
                                 div {
                                     key: "{prize.id}",
@@ -429,20 +433,24 @@ fn PreJudgingView(
                                     },
                                     div { class: "flex items-start justify-between gap-3",
                                         div {
-                                            h3 { class: "font-medium text-foreground-neutral-primary text-lg",
-                                                "{prize.name}"
-                                            }
+                                            h3 { class: "{title_class}", "{prize.name}" }
                                             if let Some(desc) = &prize.description {
-                                                p { class: "text-sm text-foreground-neutral-secondary mt-1",
-                                                    "{desc}"
-                                                }
+                                                p { class: "{desc_class}", "{desc}" }
                                             }
                                         }
-                                        div {
-                                            class: "{check_class}",
+                                        div { class: "{check_class}",
                                             if is_assigned {
-                                                svg { class: "w-4 h-4 text-white", fill: "none", stroke: "currentColor", view_box: "0 0 24 24",
-                                                    path { stroke_linecap: "round", stroke_linejoin: "round", stroke_width: "3", d: "M5 13l4 4L19 7" }
+                                                svg {
+                                                    class: "w-4 h-4 text-white",
+                                                    fill: "none",
+                                                    stroke: "currentColor",
+                                                    view_box: "0 0 24 24",
+                                                    path {
+                                                        stroke_linecap: "round",
+                                                        stroke_linejoin: "round",
+                                                        stroke_width: "3",
+                                                        d: "M5 13l4 4L19 7",
+                                                    }
                                                 }
                                             }
                                         }
@@ -454,21 +462,101 @@ fn PreJudgingView(
                 }
             }
 
+            // Walk type selector
+            div { class: "mb-8 p-6 bg-background-neutral-secondary-enabled rounded-xl",
+                h3 { class: "font-medium text-foreground-neutral-primary mb-3", "Routing Algorithm" }
+                p { class: "text-sm text-foreground-neutral-secondary mb-4",
+                    "Choose how you'd like to be routed to projects:"
+                }
+                div { class: "flex flex-wrap gap-3",
+                    {
+                        let slug_default = slug.clone();
+                        let mut state_setter_default = state_setter.clone();
+                        let is_default = walk_type == WalkType::Default;
+                        let default_class = if is_default {
+                            "px-4 py-2 rounded-lg border-2 cursor-pointer transition-all duration-200 border-stroke-brand-primary bg-background-brand-primary-enabled"
+                        } else {
+                            "px-4 py-2 rounded-lg border-2 cursor-pointer transition-all duration-200 border-stroke-neutral-1 bg-background-neutral-primary hover:border-stroke-neutral-2"
+                        };
+                        rsx! {
+                            button {
+                                class: "{default_class}",
+                                onclick: move |_| {
+                                    let slug = slug_default.clone();
+                                    spawn(async move {
+                                        if set_walk_type(slug.clone(), WalkType::Default).await.is_ok() {
+                                            if let Ok(new_state) = get_unified_state(slug).await {
+                                                state_setter_default.set(Some(new_state));
+                                            }
+                                        }
+                                    });
+                                },
+                                div { class: "text-left",
+                                    p { class: "font-medium text-foreground-neutral-primary", "Random" }
+                                    p { class: "text-xs text-foreground-neutral-tertiary", "Projects at random (default)" }
+                                }
+                            }
+                        }
+                    }
+                    {
+                        let slug_proximity = slug.clone();
+                        let mut state_setter_proximity = state_setter.clone();
+                        let is_proximity = walk_type == WalkType::Proximity;
+                        let proximity_class = if is_proximity {
+                            "px-4 py-2 rounded-lg border-2 cursor-pointer transition-all duration-200 border-stroke-brand-primary bg-background-brand-primary-enabled"
+                        } else {
+                            "px-4 py-2 rounded-lg border-2 cursor-pointer transition-all duration-200 border-stroke-neutral-1 bg-background-neutral-primary hover:border-stroke-neutral-2"
+                        };
+                        rsx! {
+                            button {
+                                class: "{proximity_class}",
+                                onclick: move |_| {
+                                    let slug = slug_proximity.clone();
+                                    spawn(async move {
+                                        if set_walk_type(slug.clone(), WalkType::Proximity).await.is_ok() {
+                                            if let Ok(new_state) = get_unified_state(slug).await {
+                                                state_setter_proximity.set(Some(new_state));
+                                            }
+                                        }
+                                    });
+                                },
+                                div { class: "text-left",
+                                    p { class: "font-medium text-foreground-neutral-primary", "Proximity" }
+                                    p { class: "text-xs text-foreground-neutral-tertiary", "Nearest tables (less walking)" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             div { class: "flex flex-col items-center gap-4",
+                if !judging_started {
+                    div { class: "p-4 mb-4 bg-background-warning-secondary rounded-lg text-center max-w-md",
+                        p { class: "text-foreground-warning-primary font-medium",
+                            "Judging hasn't started yet. You can select your prize tracks and routing preference above while you wait."
+                        }
+                    }
+                }
+
                 Button {
-                    disabled: loading || assigned_prizes.is_empty(),
+                    disabled: loading || assigned_prizes.is_empty() || !judging_started,
                     onclick: move |_| on_start.call(()),
                     class: "w-full max-w-md py-4 text-lg",
                     if loading {
                         "Starting..."
+                    } else if !judging_started {
+                        "Waiting to Start..."
                     } else if assigned_prizes.is_empty() {
                         "Select a Prize Track to Start"
                     } else {
                         "Start Judging"
                     }
                 }
-                if assigned_prizes.is_empty() {
-                    p { class: "text-sm text-foreground-neutral-tertiary", "You must select at least one prize track to begin." }
+                if judging_started && assigned_prizes.is_empty() {
+                    p { class: "text-sm text-foreground-neutral-tertiary",
+                        "You must select at least one prize track to begin."
+                    }
                 }
             }
         }
@@ -504,10 +592,7 @@ fn InProgressView(
 
     if let Some(feature) = viewed_project.read().clone() {
         return rsx! {
-            ProjectInfoModal {
-                feature: feature,
-                on_close: move |_| viewed_project.set(None),
-            }
+            ProjectInfoModal { feature, on_close: move |_| viewed_project.set(None) }
         };
     }
 
@@ -548,7 +633,11 @@ fn InProgressView(
                         button {
                             class: "text-xs text-foreground-brand-primary hover:underline cursor-pointer",
                             onclick: move |_| show_json.toggle(),
-                            if *show_json.read() { "Hide Data" } else { "Show Data" }
+                            if *show_json.read() {
+                                "Hide Data"
+                            } else {
+                                "Show Data"
+                            }
                         }
                     }
                     p { class: "text-foreground-neutral-secondary mb-4", "{description}" }
@@ -565,7 +654,7 @@ fn InProgressView(
 
             // Prize cards
             div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8",
-                for (i, feature) in features.iter().enumerate() {
+                for (i , feature) in features.iter().enumerate() {
                     PrizeCard {
                         key: "{feature.feature_id}",
                         feature: feature.clone(),
@@ -597,9 +686,7 @@ fn InProgressView(
 
             // Submit button
             div { class: "flex justify-center items-center gap-4",
-                Button {
-                    disabled: loading,
-                    onclick: move |_| on_skip.call(()),
+                Button { disabled: loading, onclick: move |_| on_skip.call(()),
                     if loading {
                         "Skipping..."
                     } else {
@@ -852,27 +939,36 @@ fn ProjectInfoModal(feature: JudgeFeatureState, on_close: EventHandler<()>) -> E
                 // Content
                 div { class: "p-6 space-y-6",
                     div {
-                        h3 { class: "text-sm text-foreground-neutral-secondary mb-1", "Team" }
-                        p { class: "text-lg font-medium text-foreground-neutral-primary", "{team_name}" }
+                        h3 { class: "text-sm text-foreground-neutral-secondary mb-1",
+                            "Team"
+                        }
+                        p { class: "text-lg font-medium text-foreground-neutral-primary",
+                            "{team_name}"
+                        }
                     }
 
                     div {
-                        h3 { class: "text-sm text-foreground-neutral-secondary mb-1", "Table" }
-                        p { class: "text-lg font-medium text-foreground-neutral-primary", "{table}" }
+                        h3 { class: "text-sm text-foreground-neutral-secondary mb-1",
+                            "Table"
+                        }
+                        p { class: "text-lg font-medium text-foreground-neutral-primary",
+                            "{table}"
+                        }
                     }
 
                     div {
-                        h3 { class: "text-sm text-foreground-neutral-secondary mb-1", "Description" }
-                        p { class: "text-base text-foreground-neutral-primary whitespace-pre-wrap", "{description}" }
+                        h3 { class: "text-sm text-foreground-neutral-secondary mb-1",
+                            "Description"
+                        }
+                        p { class: "text-base text-foreground-neutral-primary whitespace-pre-wrap",
+                            "{description}"
+                        }
                     }
                 }
 
                 // Footer
                 div { class: "p-6 border-t border-border-neutral-secondary bg-background-neutral-secondary-enabled rounded-b-xl flex justify-end",
-                    Button {
-                        onclick: move |_| on_close.call(()),
-                        "Close"
-                    }
+                    Button { onclick: move |_| on_close.call(()), "Close" }
                 }
             }
         }

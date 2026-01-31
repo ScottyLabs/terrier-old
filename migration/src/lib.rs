@@ -22,6 +22,7 @@ mod m20260119_add_judge_feature_assignment;
 mod m20260127_000000_add_table_number_to_submission;
 mod m20260127_000001_add_prize_required_events;
 mod m20260131_add_judge_prize_track;
+mod m20260131_add_judge_walk_type;
 
 pub struct Migrator;
 
@@ -51,6 +52,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260127_000000_add_table_number_to_submission::Migration),
             Box::new(m20260127_000001_add_prize_required_events::Migration),
             Box::new(m20260131_add_judge_prize_track::Migration),
+            Box::new(m20260131_add_judge_walk_type::Migration),
         ]
     }
 }

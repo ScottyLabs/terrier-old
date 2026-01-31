@@ -23,8 +23,8 @@ use crate::core::auth::{context::RequestContext, middleware::SyncedUser};
 #[get("/api/hackathons/:slug/judging/state", user: SyncedUser)]
 pub async fn get_unified_state(slug: String) -> Result<UnifiedJudgingState, ServerFnError> {
     use crate::entities::{
-        feature, judge_feature_assignment, judge_prize_track, prize, prize_feature_weight,
-        project_visit, submission, teams,
+        feature, judge_feature_assignment, judge_prize_track, judge_walk_type, prize,
+        prize_feature_weight, project_visit, submission, teams,
     };
     use sea_orm::{
         ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, QueryFilter, QuerySelect,
@@ -233,6 +233,18 @@ pub async fn get_unified_state(slug: String) -> Result<UnifiedJudgingState, Serv
         })
         .collect();
 
+    // Fetch judge's walk type preference
+    let walk_type_record = judge_walk_type::Entity::find()
+        .filter(judge_walk_type::Column::JudgeId.eq(ctx.user.id))
+        .filter(judge_walk_type::Column::HackathonId.eq(hackathon.id))
+        .one(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch walk type: {}", e)))?;
+
+    let walk_type = walk_type_record
+        .map(|r| WalkType::from_str(&r.walk_type))
+        .unwrap_or_default();
+
     Ok(UnifiedJudgingState {
         current_project,
         features,
@@ -246,6 +258,7 @@ pub async fn get_unified_state(slug: String) -> Result<UnifiedJudgingState, Serv
             })
             .collect(),
         judging_started: hackathon.judging_started,
+        walk_type,
     })
 }
 
@@ -307,7 +320,68 @@ pub async fn toggle_prize_assignment(slug: String, prize_id: i32) -> Result<(), 
     Ok(())
 }
 
-/// Request the next project to judge using 2-phase algorithm
+/// Set the walk type preference for a judge
+#[cfg_attr(feature = "server", utoipa::path(
+    post,
+    path = "/api/hackathons/{slug}/judging/walk-type",
+    params(
+        ("slug" = String, Path, description = "Hackathon slug")
+    ),
+    request_body = WalkType,
+    responses(
+        (status = 200, description = "Walk type updated"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Server error")
+    ),
+    tag = "judging"
+))]
+#[post("/api/hackathons/:slug/judging/walk-type", user: SyncedUser)]
+pub async fn set_walk_type(slug: String, walk_type: WalkType) -> Result<(), ServerFnError> {
+    use crate::entities::judge_walk_type;
+    use sea_orm::{
+        ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, QueryFilter, Set,
+    };
+
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
+
+    let hackathon = ctx.hackathon()?;
+
+    // Check if a record already exists
+    let existing = judge_walk_type::Entity::find()
+        .filter(judge_walk_type::Column::JudgeId.eq(ctx.user.id))
+        .filter(judge_walk_type::Column::HackathonId.eq(hackathon.id))
+        .one(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to check walk type: {}", e)))?;
+
+    if let Some(record) = existing {
+        // Update existing record
+        let mut active: judge_walk_type::ActiveModel = record.into();
+        active.walk_type = Set(walk_type.to_str().to_string());
+        active
+            .update(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to update walk type: {}", e)))?;
+    } else {
+        // Create new record
+        let new_record = judge_walk_type::ActiveModel {
+            id: NotSet,
+            judge_id: Set(ctx.user.id),
+            hackathon_id: Set(hackathon.id),
+            walk_type: Set(walk_type.to_str().to_string()),
+            created_at: Set(chrono::Utc::now().naive_utc()),
+        };
+        new_record
+            .insert(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to create walk type: {}", e)))?;
+    }
+
+    Ok(())
+}
 #[cfg_attr(feature = "server", utoipa::path(
     post,
     path = "/api/hackathons/{slug}/judging/next-project",
@@ -324,11 +398,13 @@ pub async fn toggle_prize_assignment(slug: String, prize_id: i32) -> Result<(), 
 ))]
 #[post("/api/hackathons/:slug/judging/next-project", user: SyncedUser)]
 pub async fn request_next_project(slug: String) -> Result<Option<CurrentProject>, ServerFnError> {
-    use crate::entities::{project_feature_score, project_visit, submission, teams};
+    use crate::entities::{
+        judge_walk_type, project_feature_score, project_visit, submission, teams,
+    };
     use rand::prelude::*;
     use sea_orm::{
         ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, PaginatorTrait,
-        QueryFilter, QuerySelect, Set, TransactionTrait,
+        QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
     };
 
     let ctx = RequestContext::extract(&user)
@@ -462,68 +538,162 @@ pub async fn request_next_project(slug: String) -> Result<Option<CurrentProject>
         submission_visit_counts.insert(sub.id, count);
     }
 
+    // Fetch judge's walk type preference
+    let walk_type_record = judge_walk_type::Entity::find()
+        .filter(judge_walk_type::Column::JudgeId.eq(ctx.user.id))
+        .filter(judge_walk_type::Column::HackathonId.eq(hackathon.id))
+        .one(&txn)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch walk type: {}", e)))?;
+
+    let walk_type = walk_type_record
+        .map(|r| WalkType::from_str(&r.walk_type))
+        .unwrap_or_default();
+
+    // Helper function to parse table coordinates (L1 distance calculation)
+    fn parse_table_coords(table_number: &str) -> Option<(i32, i32)> {
+        let num: i32 = table_number.parse().ok()?;
+        if num < 10 {
+            Some((num, 0)) // X = full number, Y = 0
+        } else {
+            Some((num % 10, num / 10)) // X = last digit, Y = rest
+        }
+    }
+
+    fn l1_distance(a: (i32, i32), b: (i32, i32)) -> i32 {
+        (a.0 - b.0).abs() + (a.1 - b.1).abs()
+    }
+
+    // Phase 1: Prioritize submissions with < 2 visits
+    let under_visited: Vec<&submission::Model> = available_submissions
+        .iter()
+        .filter(|s| submission_visit_counts.get(&s.id).copied().unwrap_or(0) < 2)
+        .copied()
+        .collect();
+
+    // Track if we have under-visited projects before moving the vec
+    let has_under_visited = !under_visited.is_empty();
+
+    // Determine pool to select from: prioritize under-visited
+    let selection_pool: Vec<&submission::Model> = if has_under_visited {
+        under_visited
+    } else {
+        available_submissions.clone()
+    };
+
     let mut rng = rand::rng();
     let selected_sub;
 
-    // Phase 1: Prioritize submissions with < 2 visits
-    let under_visited: Vec<_> = available_submissions
-        .iter()
-        .filter(|s| submission_visit_counts.get(&s.id).copied().unwrap_or(0) < 2)
-        .collect();
-
-    if !under_visited.is_empty() {
-        // Random selection from under-visited
-        selected_sub = *under_visited.choose(&mut rng).unwrap();
-    } else {
-        // Phase 2: Softmax-weighted selection based on average feature scores
-        let mut weights: Vec<f64> = Vec::new();
-
-        for sub in &available_submissions {
-            // Get average score across all features
-            let score_records = project_feature_score::Entity::find()
-                .filter(project_feature_score::Column::SubmissionId.eq(sub.id))
-                .all(&txn)
+    match walk_type {
+        WalkType::Proximity => {
+            // Get the judge's last completed visit to find previous table
+            let last_visit = project_visit::Entity::find()
+                .filter(project_visit::Column::JudgeId.eq(ctx.user.id))
+                .filter(project_visit::Column::HackathonId.eq(hackathon.id))
+                .filter(project_visit::Column::IsActive.eq(false))
+                .order_by_desc(project_visit::Column::CompletionTime)
+                .one(&txn)
                 .await
-                .unwrap_or_default();
+                .map_err(|e| ServerFnError::new(format!("Failed to fetch last visit: {}", e)))?;
 
-            let scores: Vec<f32> = score_records.iter().filter_map(|r| r.score).collect();
-
-            let avg_score = if scores.is_empty() {
-                0.5 // Default score for unscored projects
+            // Get the previous table number
+            let previous_coords: Option<(i32, i32)> = if let Some(visit) = last_visit {
+                // Look up the submission to get its table number
+                if let Some(prev_sub) = all_submissions.iter().find(|s| s.id == visit.submission_id)
+                {
+                    prev_sub
+                        .table_number
+                        .as_ref()
+                        .and_then(|t| parse_table_coords(t))
+                } else {
+                    None
+                }
             } else {
-                scores.iter().sum::<f32>() / scores.len() as f32
+                None
             };
 
-            // Softmax weight (higher scores get higher probability)
-            weights.push((avg_score as f64).exp());
-        }
+            if let Some(prev_coords) = previous_coords {
+                // Find nearest submission by L1 distance
+                let mut nearest_sub = None;
+                let mut min_distance = i32::MAX;
 
-        // Normalize weights
-        let total: f64 = weights.iter().sum();
-        if total > 0.0 {
-            for w in &mut weights {
-                *w /= total;
-            }
-        } else {
-            // Equal weights if all zero
-            let equal = 1.0 / weights.len() as f64;
-            for w in &mut weights {
-                *w = equal;
-            }
-        }
+                for sub in &selection_pool {
+                    if let Some(table) = &sub.table_number {
+                        if let Some(coords) = parse_table_coords(table) {
+                            let dist = l1_distance(prev_coords, coords);
+                            if dist < min_distance {
+                                min_distance = dist;
+                                nearest_sub = Some(sub);
+                            }
+                        }
+                    }
+                }
 
-        // Sample using cumulative distribution
-        let mut cumsum = 0.0;
-        let sample: f64 = rng.random();
-        let mut selected_idx = 0;
-        for (i, &w) in weights.iter().enumerate() {
-            cumsum += w;
-            if sample <= cumsum {
-                selected_idx = i;
-                break;
+                selected_sub = nearest_sub.unwrap_or_else(|| {
+                    // Fall back to random if no valid table numbers
+                    selection_pool.choose(&mut rng).unwrap()
+                });
+            } else {
+                // No previous visit, fall back to random selection
+                selected_sub = selection_pool.choose(&mut rng).unwrap();
             }
         }
-        selected_sub = &available_submissions[selected_idx];
+        WalkType::Default => {
+            // Default algorithm: random for under-visited, softmax for the rest
+            if has_under_visited {
+                selected_sub = selection_pool.choose(&mut rng).unwrap();
+            } else {
+                // Phase 2: Softmax-weighted selection based on average feature scores
+                let mut weights: Vec<f64> = Vec::new();
+
+                for sub in &available_submissions {
+                    // Get average score across all features
+                    let score_records = project_feature_score::Entity::find()
+                        .filter(project_feature_score::Column::SubmissionId.eq(sub.id))
+                        .all(&txn)
+                        .await
+                        .unwrap_or_default();
+
+                    let scores: Vec<f32> = score_records.iter().filter_map(|r| r.score).collect();
+
+                    let avg_score = if scores.is_empty() {
+                        0.5 // Default score for unscored projects
+                    } else {
+                        scores.iter().sum::<f32>() / scores.len() as f32
+                    };
+
+                    // Softmax weight (higher scores get higher probability)
+                    weights.push((avg_score as f64).exp());
+                }
+
+                // Normalize weights
+                let total: f64 = weights.iter().sum();
+                if total > 0.0 {
+                    for w in &mut weights {
+                        *w /= total;
+                    }
+                } else {
+                    // Equal weights if all zero
+                    let equal = 1.0 / weights.len() as f64;
+                    for w in &mut weights {
+                        *w = equal;
+                    }
+                }
+
+                // Sample using cumulative distribution
+                let mut cumsum = 0.0;
+                let sample: f64 = rng.random();
+                let mut selected_idx = 0;
+                for (i, &w) in weights.iter().enumerate() {
+                    cumsum += w;
+                    if sample <= cumsum {
+                        selected_idx = i;
+                        break;
+                    }
+                }
+                selected_sub = &available_submissions[selected_idx];
+            }
+        }
     }
 
     // Create the visit

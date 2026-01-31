@@ -99,15 +99,7 @@ fn NavItems(
                 }
             }
         }
-        div { onclick: handle_click,
-            SidebarItem {
-                label: "Messages".to_string(),
-                icon: LdMessageSquare,
-                to: Route::HackathonMessages {
-                    slug: slug.clone(),
-                },
-            }
-        }
+
         if has_submission {
             div { onclick: handle_click,
                 SidebarItem {
@@ -130,15 +122,7 @@ fn NavItems(
                 }
             }
         }
-        div { onclick: handle_click,
-            SidebarItem {
-                label: "Profile".to_string(),
-                icon: LdUser,
-                to: Route::HackathonProfile {
-                    slug: slug.clone(),
-                },
-            }
-        }
+
         if has_apply {
             div { onclick: handle_click,
                 SidebarItem {

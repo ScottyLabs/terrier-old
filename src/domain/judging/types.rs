@@ -3,6 +3,39 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "server")]
 use utoipa::ToSchema;
 
+// ============================================================================
+// Walk Type Enum
+// ============================================================================
+
+/// Type of random walk algorithm for judge routing
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "server", derive(ToSchema))]
+pub enum WalkType {
+    /// Default 2-phase algorithm: random selection for under-visited, softmax for rest
+    #[default]
+    Default,
+    /// Proximity-based: routes to nearest table (L1 distance)
+    Proximity,
+}
+
+impl WalkType {
+    /// Convert from database string representation
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "Proximity" => WalkType::Proximity,
+            _ => WalkType::Default,
+        }
+    }
+
+    /// Convert to database string representation
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            WalkType::Default => "Default",
+            WalkType::Proximity => "Proximity",
+        }
+    }
+}
+
 /// Current assignment for a judge
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "server", derive(ToSchema))]
@@ -151,6 +184,8 @@ pub struct UnifiedJudgingState {
     pub assigned_prizes: Vec<PrizeInfo>,
     pub all_prizes: Vec<PrizeInfo>,
     pub judging_started: bool,
+    /// The judge's current walk type preference
+    pub walk_type: WalkType,
 }
 
 /// Current project being judged
