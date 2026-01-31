@@ -194,13 +194,14 @@ pub async fn create_prize(
         ));
     }
 
-    // Create the prize
+    // Create the prize with hackathon_id
     let prize_model = prize::ActiveModel {
         name: Set(request.name.clone()),
         description: Set(request.description.clone()),
         image_url: Set(request.image_url.clone()),
         category: Set(request.category.clone()),
         value: Set(request.value.clone()),
+        hackathon_id: Set(Some(hackathon.id)),
         ..Default::default()
     };
 

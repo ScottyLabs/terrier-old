@@ -22,8 +22,15 @@ use crate::core::auth::{context::RequestContext, middleware::SyncedUser};
 ))]
 #[get("/api/hackathons/:slug/judging/state", user: SyncedUser)]
 pub async fn get_unified_state(slug: String) -> Result<UnifiedJudgingState, ServerFnError> {
-    use crate::entities::{feature, judge_feature_assignment, project_visit, submission, teams};
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    use crate::entities::{
+        feature, judge_feature_assignment, judge_prize_track, prize, prize_feature_weight,
+        project_visit, submission, teams,
+    };
+    use sea_orm::{
+        ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, QueryFilter, QuerySelect,
+        Set,
+    };
+    use std::collections::{HashMap, HashSet};
 
     let ctx = RequestContext::extract(&user)
         .await?
@@ -32,27 +39,139 @@ pub async fn get_unified_state(slug: String) -> Result<UnifiedJudgingState, Serv
 
     let hackathon = ctx.hackathon()?;
 
-    // Get judge's assigned features
+    // Step 1: Resolve relevant prizes (Assignments + Default Tracks)
+    // A judge is responsible for:
+    // 1. Prizes they are explicitly assigned to (Restricted tracks)
+    // 2. Prizes that have NO assignments (Default tracks)
+
+    // Fetch all prizes for this hackathon
+    let all_prizes = prize::Entity::find()
+        .filter(prize::Column::HackathonId.eq(hackathon.id))
+        .all(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch hackathon prizes: {}", e)))?;
+
+    let all_prize_ids: Vec<i32> = all_prizes.iter().map(|p| p.id).collect();
+
+    // Find restricted prizes (any assignment across all judges)
+    let restricted_prize_ids: HashSet<i32> = if all_prize_ids.is_empty() {
+        HashSet::new()
+    } else {
+        judge_prize_track::Entity::find()
+            .filter(judge_prize_track::Column::PrizeId.is_in(all_prize_ids.clone()))
+            .select_only()
+            .column(judge_prize_track::Column::PrizeId)
+            .into_tuple::<i32>()
+            .all(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch restricted prizes: {}", e)))?
+            .into_iter()
+            .collect()
+    };
+
+    // Find assignments for THIS judge
+    let my_assignments: HashSet<i32> = judge_prize_track::Entity::find()
+        .filter(judge_prize_track::Column::JudgeId.eq(ctx.user.id))
+        .filter(judge_prize_track::Column::PrizeId.is_in(all_prize_ids.clone()))
+        .select_only()
+        .column(judge_prize_track::Column::PrizeId)
+        .into_tuple::<i32>()
+        .all(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch my assignments: {}", e)))?
+        .into_iter()
+        .collect();
+
+    // Determine effective prizes: My Assignments + Default Prizes (prizes with NO assignments)
+    let mut effective_prize_ids = my_assignments.clone();
+    for prize in &all_prizes {
+        if !restricted_prize_ids.contains(&prize.id) {
+            effective_prize_ids.insert(prize.id);
+        }
+    }
+
+    // Step 2: Get feature IDs linked to these prizes
+    let target_feature_ids: HashSet<i32> = if all_prize_ids.is_empty() {
+        // Fallback: No prizes defined, assume all features define the "default" track
+        feature::Entity::find()
+            .filter(feature::Column::HackathonId.eq(hackathon.id))
+            .all(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch features: {}", e)))?
+            .into_iter()
+            .map(|f| f.id)
+            .collect()
+    } else if effective_prize_ids.is_empty() {
+        // Prizes exist, but I'm assigned to none and there are no default prizes
+        HashSet::new()
+    } else {
+        // Get features linked to effective prizes
+        prize_feature_weight::Entity::find()
+            .filter(
+                prize_feature_weight::Column::PrizeId.is_in(effective_prize_ids.iter().copied()),
+            )
+            .filter(prize_feature_weight::Column::Weight.ne(0.0))
+            .all(&ctx.state.db)
+            .await
+            .map_err(|e| {
+                ServerFnError::new(format!("Failed to fetch prize feature weights: {}", e))
+            })?
+            .into_iter()
+            .map(|pfw| pfw.feature_id)
+            .collect()
+    };
+
+    // Step 3: Get or create judge_feature_assignment entries for these features
+    let existing_assignments = judge_feature_assignment::Entity::find()
+        .filter(judge_feature_assignment::Column::JudgeId.eq(ctx.user.id))
+        .all(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch assignments: {}", e)))?;
+
+    let existing_feature_ids: HashSet<i32> =
+        existing_assignments.iter().map(|a| a.feature_id).collect();
+
+    // Create missing assignments
+    let now = chrono::Utc::now().naive_utc();
+    for &feature_id in &target_feature_ids {
+        if !existing_feature_ids.contains(&feature_id) {
+            let new_assignment = judge_feature_assignment::ActiveModel {
+                id: NotSet,
+                judge_id: Set(ctx.user.id),
+                feature_id: Set(feature_id),
+                current_best_submission_id: Set(None),
+                notes: Set(None),
+                created_at: Set(now),
+            };
+            let _ = new_assignment.insert(&ctx.state.db).await;
+        }
+    }
+
+    // Step 4: Re-fetch all assignments and build the features list
     let assignments = judge_feature_assignment::Entity::find()
         .filter(judge_feature_assignment::Column::JudgeId.eq(ctx.user.id))
         .all(&ctx.state.db)
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to fetch assignments: {}", e)))?;
 
-    // Get feature details for each assignment
+    // Pre-fetch all features for efficiency
+    let all_features_map: HashMap<i32, feature::Model> = feature::Entity::find()
+        .filter(feature::Column::HackathonId.eq(hackathon.id))
+        .all(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch all features: {}", e)))?
+        .into_iter()
+        .map(|f| (f.id, f))
+        .collect();
+
     let mut features = Vec::new();
     for assignment in assignments {
-        let feature_model = feature::Entity::find_by_id(assignment.feature_id)
-            .one(&ctx.state.db)
-            .await
-            .map_err(|e| ServerFnError::new(format!("Failed to fetch feature: {}", e)))?;
+        // Only include features that are in our target set
+        if !target_feature_ids.contains(&assignment.feature_id) {
+            continue;
+        }
 
-        if let Some(feat) = feature_model {
-            // Only include features for this hackathon
-            if feat.hackathon_id != hackathon.id {
-                continue;
-            }
-
+        if let Some(feat) = all_features_map.get(&assignment.feature_id) {
             let mut current_best_team_name = None;
             let mut current_best_description = None;
 
@@ -77,8 +196,8 @@ pub async fn get_unified_state(slug: String) -> Result<UnifiedJudgingState, Serv
 
             features.push(JudgeFeatureState {
                 feature_id: feat.id,
-                feature_name: feat.name,
-                feature_description: feat.description,
+                feature_name: feat.name.clone(),
+                feature_description: feat.description.clone(),
                 current_best_submission_id: assignment.current_best_submission_id,
                 current_best_team_name,
                 current_best_description,
@@ -131,9 +250,21 @@ pub async fn get_unified_state(slug: String) -> Result<UnifiedJudgingState, Serv
         None
     };
 
+    // Build assigned prizes list
+    let assigned_prizes: Vec<PrizeInfo> = all_prizes
+        .into_iter()
+        .filter(|p| effective_prize_ids.contains(&p.id))
+        .map(|p| PrizeInfo {
+            id: p.id,
+            name: p.name,
+            description: p.description,
+        })
+        .collect();
+
     Ok(UnifiedJudgingState {
         current_project,
         features,
+        assigned_prizes,
         judging_started: hackathon.judging_started,
     })
 }
@@ -248,10 +379,32 @@ pub async fn request_next_project(slug: String) -> Result<Option<CurrentProject>
         .map_err(|e| ServerFnError::new(format!("Failed to fetch locked: {}", e)))?;
 
     // Filter to available submissions
-    let available_submissions: Vec<_> = all_submissions
+    let mut available_submissions: Vec<_> = all_submissions
         .iter()
         .filter(|s| !visited_ids.contains(&s.id) && !locked_ids.contains(&s.id))
         .collect();
+
+    // Prize track filtering:
+    // A judge can only judge a submission if:
+    //   1. There are no restricted prize tracks (all tracks are default), OR
+    //   2. The submission has no prize track entries, OR
+    //   3. ANY of its prize tracks are "Default" (no judge assignments), OR
+    //   4. ANY of its prize tracks have this judge assigned
+    let (valid_submission_ids, submissions_with_entries) =
+        get_valid_submissions_for_judge(&txn, ctx.user.id).await?;
+
+    // Only apply filtering if we have explicit valid IDs
+    // Empty valid_ids means either: no restrictions exist, OR no submissions are valid for this judge
+    // We differentiate by checking if submissions_with_entries is also empty
+    let should_filter = !submissions_with_entries.is_empty();
+    if should_filter {
+        // A submission is valid if:
+        // - It's explicitly in valid_submission_ids (it's in a default or assigned track), OR
+        // - It has no prize track entries (not submitted to any track)
+        available_submissions.retain(|s| {
+            valid_submission_ids.contains(&s.id) || !submissions_with_entries.contains(&s.id)
+        });
+    }
 
     if available_submissions.is_empty() {
         txn.commit().await.ok();
@@ -512,4 +665,90 @@ pub async fn submit_comparisons(
         .map_err(|e| ServerFnError::new(format!("Failed to commit: {}", e)))?;
 
     Ok(())
+}
+
+/// Helper: Get submission IDs that a judge can judge based on prize track assignments.
+/// A judge can judge a submission if:
+///   1. The submission has no prize track entries (not submitted to any track), OR
+///   2. ANY of its prize tracks are "Default" (no judge assignments), OR
+///   3. ANY of its prize tracks have this judge assigned
+/// Returns (valid_ids, submissions_with_entries):
+///   - valid_ids: submission IDs explicitly valid due to prize track rules
+///   - submissions_with_entries: all submission IDs that have at least one prize track entry
+/// If submissions_with_entries is empty, no filtering should be applied.
+/// If valid_ids equals submissions_with_entries, all submissions with entries are valid.
+#[cfg(feature = "server")]
+async fn get_valid_submissions_for_judge<C: sea_orm::ConnectionTrait>(
+    db: &C,
+    judge_id: i32,
+) -> Result<(Vec<i32>, Vec<i32>), ServerFnError> {
+    use crate::entities::{judge_prize_track, prize_track_entry};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    use std::collections::HashSet;
+
+    // Get all prize track entries (submission_id -> prize_id mappings)
+    let entries = prize_track_entry::Entity::find()
+        .all(db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch entries: {}", e)))?;
+
+    if entries.is_empty() {
+        // No prize track entries exist, all submissions are valid (no filtering needed)
+        return Ok((Vec::new(), Vec::new()));
+    }
+
+    // Track which submissions have prize track entries
+    let mut submissions_with_entries: HashSet<i32> = HashSet::new();
+    for entry in &entries {
+        submissions_with_entries.insert(entry.submission_id);
+    }
+
+    // Get all prize IDs that have ANY judge assignments (non-default tracks)
+    let restricted_prize_ids: HashSet<i32> = judge_prize_track::Entity::find()
+        .select_only()
+        .column(judge_prize_track::Column::PrizeId)
+        .into_tuple::<i32>()
+        .all(db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch restricted prizes: {}", e)))?
+        .into_iter()
+        .collect();
+
+    // If no prize tracks have judge assignments, all tracks are "default" - all submissions are valid
+    if restricted_prize_ids.is_empty() {
+        // Return all submissions with entries as valid
+        let all_valid: Vec<i32> = submissions_with_entries.iter().copied().collect();
+        return Ok((all_valid.clone(), all_valid));
+    }
+
+    // Get prize IDs that this judge is assigned to
+    let judge_prize_ids: HashSet<i32> = judge_prize_track::Entity::find()
+        .filter(judge_prize_track::Column::JudgeId.eq(judge_id))
+        .select_only()
+        .column(judge_prize_track::Column::PrizeId)
+        .into_tuple::<i32>()
+        .all(db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch judge prizes: {}", e)))?
+        .into_iter()
+        .collect();
+
+    // Build a set of valid submission IDs
+    let mut valid_submission_ids: HashSet<i32> = HashSet::new();
+
+    for entry in entries {
+        let prize_id = entry.prize_id;
+        let submission_id = entry.submission_id;
+
+        // Check if this prize track is default (not in restricted_prize_ids)
+        // OR if the judge is assigned to this prize track
+        if !restricted_prize_ids.contains(&prize_id) || judge_prize_ids.contains(&prize_id) {
+            valid_submission_ids.insert(submission_id);
+        }
+    }
+
+    Ok((
+        valid_submission_ids.into_iter().collect(),
+        submissions_with_entries.into_iter().collect(),
+    ))
 }

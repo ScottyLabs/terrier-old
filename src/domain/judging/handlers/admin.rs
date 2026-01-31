@@ -8,229 +8,6 @@ use crate::core::auth::{
     context::RequestContext, middleware::SyncedUser, permissions::Permissions,
 };
 
-/// Get judges assigned to a feature
-#[cfg_attr(feature = "server", utoipa::path(
-    get,
-    path = "/api/hackathons/{slug}/judging/features/{feature_id}/judges",
-    params(
-        ("slug" = String, Path, description = "Hackathon slug"),
-        ("feature_id" = i32, Path, description = "Feature ID")
-    ),
-    responses(
-        (status = 200, description = "Judges retrieved", body = Vec<JudgeInfo>),
-        (status = 401, description = "Unauthorized"),
-        (status = 500, description = "Server error")
-    ),
-    tag = "judging"
-))]
-#[get("/api/hackathons/:slug/judging/features/:feature_id/judges", user: SyncedUser)]
-pub async fn get_feature_judges(
-    slug: String,
-    feature_id: i32,
-) -> Result<Vec<JudgeInfo>, ServerFnError> {
-    use crate::entities::{judge_feature_assignment, users};
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-
-    let ctx = RequestContext::extract(&user)
-        .await?
-        .with_hackathon(&slug)
-        .await?;
-
-    Permissions::require_admin_or_organizer(&ctx).await?;
-
-    let assignments = judge_feature_assignment::Entity::find()
-        .filter(judge_feature_assignment::Column::FeatureId.eq(feature_id))
-        .all(&ctx.state.db)
-        .await
-        .map_err(|e| ServerFnError::new(format!("Failed to fetch assignments: {}", e)))?;
-
-    let mut judges = Vec::new();
-    for assignment in assignments {
-        if let Some(user_model) = users::Entity::find_by_id(assignment.judge_id)
-            .one(&ctx.state.db)
-            .await
-            .map_err(|e| ServerFnError::new(format!("Failed to fetch user: {}", e)))?
-        {
-            judges.push(JudgeInfo {
-                user_id: user_model.id,
-                name: user_model.name.unwrap_or_else(|| "Unknown".to_string()),
-                email: Some(user_model.email),
-            });
-        }
-    }
-
-    Ok(judges)
-}
-
-/// Assign judges to a feature
-#[cfg_attr(feature = "server", utoipa::path(
-    post,
-    path = "/api/hackathons/{slug}/judging/features/{feature_id}/judges",
-    params(
-        ("slug" = String, Path, description = "Hackathon slug"),
-        ("feature_id" = i32, Path, description = "Feature ID")
-    ),
-    request_body = AssignJudgesRequest,
-    responses(
-        (status = 200, description = "Judges assigned"),
-        (status = 401, description = "Unauthorized"),
-        (status = 403, description = "Forbidden"),
-        (status = 500, description = "Server error")
-    ),
-    tag = "judging"
-))]
-#[post("/api/hackathons/:slug/judging/features/:feature_id/judges", user: SyncedUser)]
-pub async fn assign_judges(
-    slug: String,
-    feature_id: i32,
-    request: AssignJudgesRequest,
-) -> Result<(), ServerFnError> {
-    use crate::entities::judge_feature_assignment;
-    use sea_orm::{ActiveModelTrait, ActiveValue::NotSet, Set};
-
-    let ctx = RequestContext::extract(&user)
-        .await?
-        .with_hackathon(&slug)
-        .await?;
-
-    Permissions::require_admin_or_organizer(&ctx).await?;
-
-    for judge_id in request.judge_ids {
-        let new_assignment = judge_feature_assignment::ActiveModel {
-            id: NotSet,
-            judge_id: Set(judge_id),
-            feature_id: Set(feature_id),
-            current_best_submission_id: Set(None),
-            notes: Set(None),
-            created_at: Set(chrono::Utc::now().naive_utc()),
-        };
-
-        // Use insert, ignoring conflicts (already assigned)
-        let _ = new_assignment.insert(&ctx.state.db).await;
-    }
-
-    Ok(())
-}
-
-/// Unassign a judge from a feature
-#[cfg_attr(feature = "server", utoipa::path(
-    delete,
-    path = "/api/hackathons/{slug}/judging/features/{feature_id}/judges/{judge_id}",
-    params(
-        ("slug" = String, Path, description = "Hackathon slug"),
-        ("feature_id" = i32, Path, description = "Feature ID"),
-        ("judge_id" = i32, Path, description = "Judge user ID")
-    ),
-    responses(
-        (status = 200, description = "Judge unassigned"),
-        (status = 401, description = "Unauthorized"),
-        (status = 403, description = "Forbidden"),
-        (status = 500, description = "Server error")
-    ),
-    tag = "judging"
-))]
-#[delete("/api/hackathons/:slug/judging/features/:feature_id/judges/:judge_id", user: SyncedUser)]
-pub async fn unassign_judge(
-    slug: String,
-    feature_id: i32,
-    judge_id: i32,
-) -> Result<(), ServerFnError> {
-    use crate::entities::judge_feature_assignment;
-    use sea_orm::{ColumnTrait, EntityTrait, ModelTrait, QueryFilter};
-
-    let ctx = RequestContext::extract(&user)
-        .await?
-        .with_hackathon(&slug)
-        .await?;
-
-    Permissions::require_admin_or_organizer(&ctx).await?;
-
-    let assignment = judge_feature_assignment::Entity::find()
-        .filter(judge_feature_assignment::Column::FeatureId.eq(feature_id))
-        .filter(judge_feature_assignment::Column::JudgeId.eq(judge_id))
-        .one(&ctx.state.db)
-        .await
-        .map_err(|e| ServerFnError::new(format!("Failed to find assignment: {}", e)))?;
-
-    if let Some(a) = assignment {
-        a.delete(&ctx.state.db)
-            .await
-            .map_err(|e| ServerFnError::new(format!("Failed to delete assignment: {}", e)))?;
-    }
-
-    Ok(())
-}
-
-/// Get all features with their assigned judges (for admin view)
-#[cfg_attr(feature = "server", utoipa::path(
-    get,
-    path = "/api/hackathons/{slug}/judging/features-with-judges",
-    params(
-        ("slug" = String, Path, description = "Hackathon slug")
-    ),
-    responses(
-        (status = 200, description = "Features with judges", body = Vec<FeatureWithJudges>),
-        (status = 401, description = "Unauthorized"),
-        (status = 500, description = "Server error")
-    ),
-    tag = "judging"
-))]
-#[get("/api/hackathons/:slug/judging/features-with-judges", user: SyncedUser)]
-pub async fn get_features_with_judges(
-    slug: String,
-) -> Result<Vec<FeatureWithJudges>, ServerFnError> {
-    use crate::entities::{feature, judge_feature_assignment, users};
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-
-    let ctx = RequestContext::extract(&user)
-        .await?
-        .with_hackathon(&slug)
-        .await?;
-
-    let hackathon = ctx.hackathon()?;
-
-    let features = feature::Entity::find()
-        .filter(feature::Column::HackathonId.eq(hackathon.id))
-        .all(&ctx.state.db)
-        .await
-        .map_err(|e| ServerFnError::new(format!("Failed to fetch features: {}", e)))?;
-
-    let mut result = Vec::new();
-    for feat in features {
-        let assignments = judge_feature_assignment::Entity::find()
-            .filter(judge_feature_assignment::Column::FeatureId.eq(feat.id))
-            .all(&ctx.state.db)
-            .await
-            .map_err(|e| ServerFnError::new(format!("Failed to fetch assignments: {}", e)))?;
-
-        let mut judges = Vec::new();
-        for assignment in assignments {
-            if let Some(user_model) = users::Entity::find_by_id(assignment.judge_id)
-                .one(&ctx.state.db)
-                .await
-                .map_err(|e| ServerFnError::new(format!("Failed to fetch user: {}", e)))?
-            {
-                judges.push(JudgeInfo {
-                    user_id: user_model.id,
-                    name: user_model.name.unwrap_or_else(|| "Unknown".to_string()),
-                    email: Some(user_model.email),
-                });
-            }
-        }
-
-        result.push(FeatureWithJudges {
-            feature: FeatureInfo {
-                id: feat.id,
-                name: feat.name,
-                description: feat.description,
-            },
-            judges,
-        });
-    }
-
-    Ok(result)
-}
-
 /// Get results for a specific prize track
 #[cfg_attr(feature = "server", utoipa::path(
     get,
@@ -660,4 +437,216 @@ pub async fn generate_ai_summary(
         .to_string();
 
     Ok(AiSummaryResponse { summary })
+}
+
+// ============================================================================
+// Prize Track Judge Assignment
+// ============================================================================
+
+/// Get all prize tracks with their assigned judges
+#[cfg_attr(feature = "server", utoipa::path(
+    get,
+    path = "/api/hackathons/{slug}/judging/prizes-with-judges",
+    params(
+        ("slug" = String, Path, description = "Hackathon slug")
+    ),
+    responses(
+        (status = 200, description = "Prize tracks with judges", body = Vec<PrizeWithJudges>),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Server error")
+    ),
+    tag = "judging"
+))]
+#[get("/api/hackathons/:slug/judging/prizes-with-judges", user: SyncedUser)]
+pub async fn get_prizes_with_judges(slug: String) -> Result<Vec<PrizeWithJudges>, ServerFnError> {
+    use crate::entities::{judge_prize_track, prize, users};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
+
+    let hackathon = ctx.hackathon()?;
+
+    // Fetch prizes for this hackathon (or with NULL hackathon_id for backward compatibility)
+    let prizes = prize::Entity::find()
+        .filter(
+            prize::Column::HackathonId
+                .eq(hackathon.id)
+                .or(prize::Column::HackathonId.is_null()),
+        )
+        .all(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch prizes: {}", e)))?;
+
+    let mut result = Vec::new();
+    for p in prizes {
+        let assignments = judge_prize_track::Entity::find()
+            .filter(judge_prize_track::Column::PrizeId.eq(p.id))
+            .all(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch assignments: {}", e)))?;
+
+        let mut judges = Vec::new();
+        for assignment in &assignments {
+            if let Some(user_model) = users::Entity::find_by_id(assignment.judge_id)
+                .one(&ctx.state.db)
+                .await
+                .map_err(|e| ServerFnError::new(format!("Failed to fetch user: {}", e)))?
+            {
+                judges.push(JudgeInfo {
+                    user_id: user_model.id,
+                    name: user_model.name.unwrap_or_else(|| "Unknown".to_string()),
+                    email: Some(user_model.email),
+                });
+            }
+        }
+
+        result.push(PrizeWithJudges {
+            prize: PrizeInfo {
+                id: p.id,
+                name: p.name,
+                description: p.description,
+            },
+            is_default: assignments.is_empty(),
+            judges,
+        });
+    }
+
+    Ok(result)
+}
+
+/// Assign judges to a prize track
+#[cfg_attr(feature = "server", utoipa::path(
+    post,
+    path = "/api/hackathons/{slug}/judging/prizes/{prize_id}/judges",
+    params(
+        ("slug" = String, Path, description = "Hackathon slug"),
+        ("prize_id" = i32, Path, description = "Prize track ID")
+    ),
+    request_body = AssignJudgesRequest,
+    responses(
+        (status = 200, description = "Judges assigned"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Server error")
+    ),
+    tag = "judging"
+))]
+#[post("/api/hackathons/:slug/judging/prizes/:prize_id/judges", user: SyncedUser)]
+pub async fn assign_prize_judges(
+    slug: String,
+    prize_id: i32,
+    request: AssignJudgesRequest,
+) -> Result<(), ServerFnError> {
+    use crate::entities::judge_prize_track;
+    use sea_orm::{ActiveModelTrait, ActiveValue::NotSet, Set};
+
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
+
+    Permissions::require_admin_or_organizer(&ctx).await?;
+
+    for judge_id in request.judge_ids {
+        let new_assignment = judge_prize_track::ActiveModel {
+            id: NotSet,
+            judge_id: Set(judge_id),
+            prize_id: Set(prize_id),
+            created_at: Set(chrono::Utc::now().naive_utc()),
+        };
+
+        // Use insert, ignoring conflicts (already assigned)
+        let _ = new_assignment.insert(&ctx.state.db).await;
+    }
+
+    Ok(())
+}
+
+/// Unassign a judge from a prize track
+#[cfg_attr(feature = "server", utoipa::path(
+    delete,
+    path = "/api/hackathons/{slug}/judging/prizes/{prize_id}/judges/{judge_id}",
+    params(
+        ("slug" = String, Path, description = "Hackathon slug"),
+        ("prize_id" = i32, Path, description = "Prize track ID"),
+        ("judge_id" = i32, Path, description = "Judge user ID")
+    ),
+    responses(
+        (status = 200, description = "Judge unassigned"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Server error")
+    ),
+    tag = "judging"
+))]
+#[delete("/api/hackathons/:slug/judging/prizes/:prize_id/judges/:judge_id", user: SyncedUser)]
+pub async fn unassign_prize_judge(
+    slug: String,
+    prize_id: i32,
+    judge_id: i32,
+) -> Result<(), ServerFnError> {
+    use crate::entities::judge_prize_track;
+    use sea_orm::{ColumnTrait, EntityTrait, ModelTrait, QueryFilter};
+
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
+
+    Permissions::require_admin_or_organizer(&ctx).await?;
+
+    let assignment = judge_prize_track::Entity::find()
+        .filter(judge_prize_track::Column::PrizeId.eq(prize_id))
+        .filter(judge_prize_track::Column::JudgeId.eq(judge_id))
+        .one(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to find assignment: {}", e)))?;
+
+    if let Some(a) = assignment {
+        a.delete(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to delete assignment: {}", e)))?;
+    }
+
+    Ok(())
+}
+
+/// Make a prize track "default" (remove all judge assignments - all judges can judge)
+#[cfg_attr(feature = "server", utoipa::path(
+    delete,
+    path = "/api/hackathons/{slug}/judging/prizes/{prize_id}/judges",
+    params(
+        ("slug" = String, Path, description = "Hackathon slug"),
+        ("prize_id" = i32, Path, description = "Prize track ID")
+    ),
+    responses(
+        (status = 200, description = "Prize track made default"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Server error")
+    ),
+    tag = "judging"
+))]
+#[delete("/api/hackathons/:slug/judging/prizes/:prize_id/judges", user: SyncedUser)]
+pub async fn make_prize_default(slug: String, prize_id: i32) -> Result<(), ServerFnError> {
+    use crate::entities::judge_prize_track;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
+
+    Permissions::require_admin_or_organizer(&ctx).await?;
+
+    judge_prize_track::Entity::delete_many()
+        .filter(judge_prize_track::Column::PrizeId.eq(prize_id))
+        .exec(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to clear assignments: {}", e)))?;
+
+    Ok(())
 }

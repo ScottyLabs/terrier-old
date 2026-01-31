@@ -7,6 +7,7 @@ pub use super::events::Entity as Events;
 pub use super::feature::Entity as Feature;
 pub use super::hackathons::Entity as Hackathons;
 pub use super::judge_feature_assignment::Entity as JudgeFeatureAssignment;
+pub use super::judge_prize_track::Entity as JudgePrizeTrack;
 pub use super::pairwise_comparison::Entity as PairwiseComparison;
 pub use super::prize::Entity as Prize;
 pub use super::prize_feature_weight::Entity as PrizeFeatureWeight;

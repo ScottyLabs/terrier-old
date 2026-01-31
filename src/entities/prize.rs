@@ -28,6 +28,8 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     Hackathons,
+    #[sea_orm(has_many = "super::judge_prize_track::Entity")]
+    JudgePrizeTrack,
     #[sea_orm(has_many = "super::prize_feature_weight::Entity")]
     PrizeFeatureWeight,
     #[sea_orm(has_many = "super::prize_required_events::Entity")]
@@ -39,6 +41,12 @@ pub enum Relation {
 impl Related<super::hackathons::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Hackathons.def()
+    }
+}
+
+impl Related<super::judge_prize_track::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::JudgePrizeTrack.def()
     }
 }
 

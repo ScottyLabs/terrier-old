@@ -9,6 +9,7 @@ pub mod events;
 pub mod feature;
 pub mod hackathons;
 pub mod judge_feature_assignment;
+pub mod judge_prize_track;
 pub mod pairwise_comparison;
 pub mod prize;
 pub mod prize_feature_weight;

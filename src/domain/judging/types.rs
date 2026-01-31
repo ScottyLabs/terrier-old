@@ -147,6 +147,7 @@ pub struct JudgeFeatureState {
 pub struct UnifiedJudgingState {
     pub current_project: Option<CurrentProject>,
     pub features: Vec<JudgeFeatureState>,
+    pub assigned_prizes: Vec<PrizeInfo>,
     pub judging_started: bool,
 }
 
@@ -205,6 +206,25 @@ pub struct JudgeInfo {
 pub struct FeatureWithJudges {
     pub feature: FeatureInfo,
     pub judges: Vec<JudgeInfo>,
+}
+
+/// Prize track info
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "server", derive(ToSchema))]
+pub struct PrizeInfo {
+    pub id: i32,
+    pub name: String,
+    pub description: Option<String>,
+}
+
+/// Prize track with assigned judges (for admin view)
+/// If judges is empty, this is a "default" track (all judges can judge)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "server", derive(ToSchema))]
+pub struct PrizeWithJudges {
+    pub prize: PrizeInfo,
+    pub judges: Vec<JudgeInfo>,
+    pub is_default: bool,
 }
 
 // ============================================================================

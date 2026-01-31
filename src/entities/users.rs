@@ -31,6 +31,8 @@ pub enum Relation {
     EventOrganizers,
     #[sea_orm(has_many = "super::judge_feature_assignment::Entity")]
     JudgeFeatureAssignment,
+    #[sea_orm(has_many = "super::judge_prize_track::Entity")]
+    JudgePrizeTrack,
     #[sea_orm(has_many = "super::pairwise_comparison::Entity")]
     PairwiseComparison,
     #[sea_orm(has_many = "super::project_visit::Entity")]
@@ -60,6 +62,12 @@ impl Related<super::event_organizers::Entity> for Entity {
 impl Related<super::judge_feature_assignment::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::JudgeFeatureAssignment.def()
+    }
+}
+
+impl Related<super::judge_prize_track::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::JudgePrizeTrack.def()
     }
 }
 

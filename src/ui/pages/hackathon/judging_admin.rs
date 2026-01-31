@@ -10,14 +10,14 @@ use crate::{
         hackathons::types::HackathonInfo,
         judging::{
             handlers::{
-                assign_judges, close_submissions, create_feature, delete_feature, get_features,
-                get_features_with_judges, get_judging_status, recalculate_rankings,
-                reopen_submissions, reset_judging, start_judging, stop_judging, unassign_judge,
-                update_feature,
+                assign_prize_judges, close_submissions, create_feature, delete_feature,
+                get_features, get_judging_status, get_prizes_with_judges, make_prize_default,
+                recalculate_rankings, reopen_submissions, reset_judging, start_judging,
+                stop_judging, unassign_prize_judge, update_feature,
             },
             types::{
-                AssignJudgesRequest, CreateFeatureRequest, FeatureInfo, FeatureWithJudges,
-                JudgeInfo, JudgingStatus, UpdateFeatureRequest,
+                AssignJudgesRequest, CreateFeatureRequest, FeatureInfo, JudgeInfo, JudgingStatus,
+                PrizeInfo, PrizeWithJudges, UpdateFeatureRequest,
             },
         },
         people::handlers::query::{HackathonPerson, get_hackathon_people},
@@ -34,22 +34,23 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
     let hackathon = use_context::<Signal<HackathonInfo>>();
     let mut status: Signal<Option<JudgingStatus>> = use_signal(|| None);
     let mut features: Signal<Vec<FeatureInfo>> = use_signal(|| Vec::new());
-    let mut features_with_judges: Signal<Vec<FeatureWithJudges>> = use_signal(|| Vec::new());
     let mut available_users: Signal<Vec<(i32, String)>> = use_signal(|| Vec::new());
     let mut loading = use_signal(|| false);
     let mut error_msg: Signal<Option<String>> = use_signal(|| None);
     let mut success_msg: Signal<Option<String>> = use_signal(|| None);
 
-    // Selected feature for editing
+    // Selected feature for editing (features can be managed, but judges are assigned to prize tracks now)
     let mut selected_feature: Signal<Option<FeatureInfo>> = use_signal(|| None);
-    let mut selected_feature_judges: Signal<Vec<JudgeInfo>> = use_signal(|| Vec::new());
     let mut edit_name = use_signal(String::new);
     let mut edit_description = use_signal(String::new);
     let mut is_creating_new = use_signal(|| false);
 
-    // Judge assignment UI state
-    let mut show_judge_picker = use_signal(|| false);
-    let mut judge_search = use_signal(String::new);
+    // Prize track state
+    let mut prizes_with_judges: Signal<Vec<PrizeWithJudges>> = use_signal(|| Vec::new());
+    let mut selected_prize: Signal<Option<PrizeInfo>> = use_signal(|| None);
+    let mut selected_prize_judges: Signal<Vec<JudgeInfo>> = use_signal(|| Vec::new());
+    let mut show_prize_judge_picker = use_signal(|| false);
+    let mut prize_judge_search = use_signal(String::new);
 
     // Fetch status and features on mount
     let slug_clone = slug.clone();
@@ -68,14 +69,8 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                 Err(e) => error_msg.set(Some(format!("Failed to get features: {}", e))),
             }
 
-            // Fetch features with judges
-            match get_features_with_judges(slug.clone()).await {
-                Ok(f) => features_with_judges.set(f),
-                Err(e) => error_msg.set(Some(format!("Failed to get judge assignments: {}", e))),
-            }
-
             // Fetch available users for judge assignment
-            match get_hackathon_people(slug).await {
+            match get_hackathon_people(slug.clone()).await {
                 Ok(users) => {
                     let user_list: Vec<(i32, String)> = users
                         .into_iter()
@@ -84,6 +79,16 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                     available_users.set(user_list);
                 }
                 Err(_) => {} // Silently fail - users just won't be able to add judges
+            }
+
+            // Fetch prizes with judges
+            match get_prizes_with_judges(slug).await {
+                Ok(p) => prizes_with_judges.set(p),
+                Err(e) => {
+                    web_sys::console::log_1(
+                        &format!("Failed to fetch prizes with judges: {}", e).into(),
+                    );
+                }
             }
         });
     });
@@ -99,8 +104,8 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                 if let Ok(f) = get_features(slug.clone()).await {
                     features.set(f);
                 }
-                if let Ok(f) = get_features_with_judges(slug).await {
-                    features_with_judges.set(f);
+                if let Ok(p) = get_prizes_with_judges(slug).await {
+                    prizes_with_judges.set(p);
                 }
             });
         }
@@ -267,30 +272,15 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
     let mut select_feature = move |feature: FeatureInfo| {
         edit_name.set(feature.name.clone());
         edit_description.set(feature.description.clone().unwrap_or_default());
-
-        // Find judges for this feature from cached data
-        let judges = features_with_judges
-            .read()
-            .iter()
-            .find(|f| f.feature.id == feature.id)
-            .map(|f| f.judges.clone())
-            .unwrap_or_default();
-        selected_feature_judges.set(judges);
-
         selected_feature.set(Some(feature));
         is_creating_new.set(false);
-        show_judge_picker.set(false);
-        judge_search.set(String::new());
     };
 
     let start_create_feature = move |_| {
         edit_name.set(String::new());
         edit_description.set(String::new());
         selected_feature.set(None);
-        selected_feature_judges.set(Vec::new());
         is_creating_new.set(true);
-        show_judge_picker.set(false);
-        judge_search.set(String::new());
     };
 
     let do_save_feature = {
@@ -378,102 +368,9 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
         }
     };
 
-    let do_assign_judge = {
-        let slug = slug.clone();
-        let refresh = refresh_data.clone();
-        move |judge_id: i32| {
-            if let Some(feature) = selected_feature.read().as_ref() {
-                let slug = slug.clone();
-                let refresh = refresh.clone();
-                let feature_id = feature.id;
-
-                spawn(async move {
-                    loading.set(true);
-                    error_msg.set(None);
-
-                    let request = AssignJudgesRequest {
-                        judge_ids: vec![judge_id],
-                    };
-
-                    match assign_judges(slug.clone(), feature_id, request).await {
-                        Ok(()) => {
-                            success_msg.set(Some("Judge assigned successfully.".to_string()));
-                            refresh();
-
-                            // Reload features with judges and update selected feature judges
-                            if let Ok(f) = get_features_with_judges(slug).await {
-                                features_with_judges.set(f.clone());
-
-                                // Update selected feature judges
-                                let judges = f
-                                    .iter()
-                                    .find(|feat| feat.feature.id == feature_id)
-                                    .map(|feat| feat.judges.clone())
-                                    .unwrap_or_default();
-                                selected_feature_judges.set(judges);
-                            }
-
-                            show_judge_picker.set(false);
-                            judge_search.set(String::new());
-                        }
-                        Err(e) => {
-                            error_msg.set(Some(format!("Failed to assign judge: {}", e)));
-                        }
-                    }
-
-                    loading.set(false);
-                });
-            }
-        }
-    };
-
-    let do_unassign_judge = {
-        let slug = slug.clone();
-        let refresh = refresh_data.clone();
-        move |judge_id: i32| {
-            if let Some(feature) = selected_feature.read().as_ref() {
-                let slug = slug.clone();
-                let refresh = refresh.clone();
-                let feature_id = feature.id;
-
-                spawn(async move {
-                    loading.set(true);
-                    error_msg.set(None);
-
-                    match unassign_judge(slug.clone(), feature_id, judge_id).await {
-                        Ok(()) => {
-                            success_msg.set(Some("Judge unassigned successfully.".to_string()));
-                            refresh();
-
-                            // Reload features with judges and update selected feature judges
-                            if let Ok(f) = get_features_with_judges(slug).await {
-                                features_with_judges.set(f.clone());
-
-                                // Update selected feature judges
-                                let judges = f
-                                    .iter()
-                                    .find(|feat| feat.feature.id == feature_id)
-                                    .map(|feat| feat.judges.clone())
-                                    .unwrap_or_default();
-                                selected_feature_judges.set(judges);
-                            }
-                        }
-                        Err(e) => {
-                            error_msg.set(Some(format!("Failed to unassign judge: {}", e)));
-                        }
-                    }
-
-                    loading.set(false);
-                });
-            }
-        }
-    };
-
     let cancel_edit = move |_| {
         selected_feature.set(None);
         is_creating_new.set(false);
-        show_judge_picker.set(false);
-        judge_search.set(String::new());
     };
 
     let _hackathon_info = hackathon.read();
@@ -745,6 +642,26 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                                                     div { class: "flex items-center justify-between mb-2",
                                                         h3 { class: "font-semibold text-lg text-foreground-neutral-primary", "{feature.name}" }
                                                         span { class: "px-3 py-1 text-xs font-semibold rounded-full bg-foreground-neutral-primary text-white",
@@ -810,116 +727,6 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                     }
                                 }
 
-                                // Judge assignment section (only for existing features)
-                                if !*is_creating_new.read() {
-                                    div { class: "mb-6",
-                                        div { class: "flex items-center justify-between mb-2",
-                                            label { class: "block text-sm font-medium text-foreground-neutral-primary",
-                                                "Assigned Judges"
-                                            }
-                                            button {
-                                                class: "text-sm text-foreground-brand-primary hover:text-foreground-brand-secondary",
-                                                onclick: move |_| show_judge_picker.toggle(),
-                                                if *show_judge_picker.read() {
-                                                    "Cancel"
-                                                } else {
-                                                    "+ Add Judge"
-                                                }
-                                            }
-                                        }
-
-                                        // List of assigned judges
-                                        if selected_feature_judges.read().is_empty() {
-                                            p { class: "text-sm text-foreground-neutral-secondary italic",
-                                                "No judges assigned yet"
-                                            }
-                                        } else {
-                                            div { class: "space-y-2",
-                                                for judge in selected_feature_judges.read().iter() {
-                                                    {
-                                                        let judge_id = judge.user_id;
-                                                        let do_unassign = do_unassign_judge.clone();
-                                                        rsx! {
-                                                            div {
-                                                                key: "{judge.user_id}",
-                                                                class: "flex items-center justify-between p-2 bg-background-neutral-secondary-enabled rounded-lg",
-                                                                div {
-                                                                    p { class: "text-sm font-medium text-foreground-neutral-primary", "{judge.name}" }
-                                                                    if let Some(email) = &judge.email {
-                                                                        p { class: "text-xs text-foreground-neutral-secondary", "{email}" }
-                                                                    }
-                                                                }
-                                                                button {
-                                                                    class: "p-1 text-foreground-danger-primary hover:bg-background-danger-secondary rounded",
-                                                                    onclick: move |_| do_unassign(judge_id),
-                                                                    Icon { width: 16, height: 16, icon: LdX }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // Judge picker dropdown
-                                        if *show_judge_picker.read() {
-                                            div { class: "mt-3 p-3 border border-stroke-neutral-1 rounded-lg bg-background-neutral-primary",
-                                                input {
-                                                    class: "w-full px-3 py-2 border border-stroke-neutral-1 rounded-lg text-foreground-neutral-primary bg-background-neutral-primary mb-2",
-                                                    r#type: "text",
-                                                    value: "{judge_search}",
-                                                    oninput: move |e| judge_search.set(e.value()),
-                                                    placeholder: "Search users...",
-                                                }
-
-                                                div { class: "max-h-40 overflow-y-auto space-y-1",
-                                                    {
-                                                        let search_term = judge_search.read().to_lowercase();
-                                                        let assigned_ids: Vec<i32> = selected_feature_judges
-                                                            .read()
-                                                            .iter()
-
-                                                            .map(|j| j.user_id)
-                                                            .collect();
-                                                        let filtered_users: Vec<(i32, String)> = available_users
-                                                            .read()
-                                                            .iter()
-                                                            .filter(|(id, name)| {
-                                                                !assigned_ids.contains(id)
-                                                                    && (search_term.is_empty()
-                                                                        || name.to_lowercase().contains(&search_term))
-                                                            })
-                                                            .take(10)
-                                                            .cloned()
-                                                            .collect();
-                                                        if filtered_users.is_empty() {
-                                                            rsx! {
-                                                                p { class: "text-sm text-foreground-neutral-secondary text-center py-2", "No matching users found" }
-                                                            }
-                                                        } else {
-                                                            rsx! {
-                                                                for (user_id , user_name) in filtered_users {
-                                                                    {
-                                                                        let do_assign = do_assign_judge.clone();
-                                                                        rsx! {
-                                                                            button {
-                                                                                key: "{user_id}",
-                                                                                class: "w-full text-left p-2 text-sm text-foreground-neutral-primary hover:bg-background-neutral-secondary-enabled rounded transition-colors",
-                                                                                onclick: move |_| do_assign(user_id),
-                                                                                "{user_name}"
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
                                 // Action buttons
                                 div { class: "flex gap-3 justify-end",
                                     if !*is_creating_new.read() {
@@ -944,6 +751,370 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                             "Saving..."
                                         } else {
                                             "Save"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Prize Track Judges section (only show when judging not started)
+            if judging_not_started {
+                div { class: "mt-8",
+                    div { class: "flex flex-col lg:flex-row gap-6",
+                        // Left: Prize track list
+                        div { class: "flex-1",
+                            div { class: "p-9 bg-background-neutral-primary rounded-[20px]",
+                                h2 { class: "text-xl font-semibold text-foreground-neutral-primary mb-4",
+                                    "Prize Track Judges"
+                                }
+                                p { class: "text-sm text-foreground-neutral-secondary mb-6",
+                                    "Assign judges to prize tracks. Default tracks (no assigned judges) can be judged by all judges."
+                                }
+
+                                if prizes_with_judges.read().is_empty() {
+                                    p { class: "text-foreground-neutral-secondary",
+                                        "No prize tracks defined yet."
+                                    }
+                                } else {
+                                    div { class: "space-y-4",
+                                        for pwj in prizes_with_judges.read().iter() {
+                                            {
+                                                let is_selected = selected_prize
+                                                    .read()
+                                                    .as_ref()
+                                                    .map(|p| p.id == pwj.prize.id)
+                                                    .unwrap_or(false);
+                                                let prize_clone = pwj.prize.clone();
+                                                let judges_clone = pwj.judges.clone();
+                                                rsx! {
+                                                    div {
+                                                        key: "{pwj.prize.id}",
+                                                        class: "p-6 border rounded-lg cursor-pointer transition-colors",
+                                                        class: if is_selected { "border-foreground-neutral-primary bg-background-neutral-secondary-enabled" } else { "border-stroke-neutral-1 hover:border-stroke-neutral-2" },
+                                                        onclick: move |_| {
+                                                            selected_prize.set(Some(prize_clone.clone()));
+                                                            selected_prize_judges.set(judges_clone.clone());
+                                                            show_prize_judge_picker.set(false);
+                                                            prize_judge_search.set(String::new());
+                                                        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                        div { class: "flex items-center justify-between mb-2",
+                                                            h3 { class: "font-semibold text-lg text-foreground-neutral-primary", "{pwj.prize.name}" }
+                                                            if pwj.is_default {
+                                                                span { class: "px-3 py-1 text-xs font-semibold rounded-full bg-background-success-secondary text-foreground-success-primary",
+                                                                    "Default (All Judges)"
+                                                                }
+                                                            } else {
+                                                                span { class: "px-3 py-1 text-xs font-semibold rounded-full bg-foreground-neutral-primary text-white",
+                                                                    "{pwj.judges.len()} judges"
+                                                                }
+                                                            }
+                                                        }
+
+                                                        if !pwj.is_default && !pwj.judges.is_empty() {
+                                                            div { class: "flex flex-wrap gap-2 mt-2",
+                                                                for judge in pwj.judges.iter().take(5) {
+                                                                    span { class: "px-2 py-1 text-xs bg-background-neutral-secondary-enabled rounded",
+                                                                        "{judge.name}"
+                                                                    }
+                                                                }
+                                                                if pwj.judges.len() > 5 {
+                                                                    span { class: "px-2 py-1 text-xs bg-background-neutral-secondary-enabled rounded",
+                                                                        "+{pwj.judges.len() - 5} more"
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Right: Edit panel for selected prize track
+                        if selected_prize.read().is_some() {
+                            {
+                                let slug = slug.clone();
+                                let refresh = refresh_data.clone();
+                                rsx! {
+                                    div { class: "w-full lg:w-96",
+                                        div { class: "p-6 bg-background-neutral-primary rounded-[20px] sticky top-4",
+                                            // Header
+                                            div { class: "flex items-center justify-between mb-4",
+                                                h3 { class: "text-lg font-semibold text-foreground-neutral-primary",
+                                                    "{selected_prize.read().as_ref().map(|p| p.name.clone()).unwrap_or_default()}"
+                                                }
+                                                button {
+                                                    class: "text-foreground-neutral-secondary hover:text-foreground-neutral-primary",
+                                                    onclick: move |_| {
+                                                        selected_prize.set(None);
+                                                        show_prize_judge_picker.set(false);
+                                                    },
+
+                                    // Assigned judges list
+
+                                    // Update selected judges
+
+                                    // Judge picker dropdown
+                                    // Update selected judges
+
+                                    // Make Default button
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                    Icon { width: 20, height: 20, icon: LdX }
+                                                }
+                                            }
+
+                                            div { class: "mb-4",
+                                                div { class: "flex items-center justify-between mb-2",
+                                                    label { class: "text-sm text-foreground-neutral-secondary", "Assigned Judges" }
+                                                    button {
+                                                        class: "text-xs text-foreground-neutral-primary flex items-center gap-1 hover:underline cursor-pointer",
+                                                        onclick: move |_| {
+                                                            let current = *show_prize_judge_picker.read();
+                                                            show_prize_judge_picker.set(!current);
+                                                        },
+                                                        Icon { width: 14, height: 14, icon: LdPlus }
+                                                        "Add judge"
+                                                    }
+                                                }
+
+                                                if selected_prize_judges.read().is_empty() {
+                                                    p { class: "text-sm text-foreground-success-primary",
+                                                        "Default - all judges can judge this track"
+                                                    }
+                                                } else {
+                                                    div { class: "flex flex-wrap gap-2",
+                                                        for judge in selected_prize_judges.read().iter() {
+                                                            {
+                                                                let judge_id = judge.user_id;
+                                                                let slug = slug.clone();
+                                                                let refresh = refresh.clone();
+                                                                let prize_id = selected_prize.read().as_ref().map(|p| p.id).unwrap_or_default();
+                                                                rsx! {
+                                                                    span { class: "inline-flex items-center gap-1 px-2 py-1 bg-background-neutral-secondary-enabled rounded text-sm",
+                                                                        "{judge.name}"
+                                                                        button {
+                                                                            class: "text-foreground-neutral-secondary hover:text-foreground-danger-primary cursor-pointer",
+                                                                            onclick: move |_| {
+                                                                                let slug = slug.clone();
+                                                                                let refresh = refresh.clone();
+                                                                                spawn(async move {
+                                                                                    if unassign_prize_judge(slug.clone(), prize_id, judge_id).await.is_ok() {
+                                                                                        refresh();
+                                                                                        if let Ok(p) = get_prizes_with_judges(slug).await {
+                                                                                            prizes_with_judges.set(p.clone());
+                                                                                            let judges = p
+                                                                                                .iter()
+                                                                                                .find(|pwj| pwj.prize.id == prize_id)
+                                                                                                .map(|pwj| pwj.judges.clone())
+                                                                                                .unwrap_or_default();
+                                                                                            selected_prize_judges.set(judges);
+                                                                                        }
+                                                                                    }
+                                                                                });
+                                                                            },
+                                                                            Icon { width: 14, height: 14, icon: LdX }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            if *show_prize_judge_picker.read() {
+                                                div { class: "mt-4 p-4 border border-stroke-neutral-1 rounded-lg",
+                                                    input {
+                                                        r#type: "text",
+                                                        class: "w-full px-3 py-2 border border-stroke-neutral-1 rounded-lg mb-2",
+                                                        placeholder: "Search users...",
+                                                        value: "{prize_judge_search}",
+                                                        oninput: move |e| prize_judge_search.set(e.value()),
+                                                    }
+                                                    div { class: "max-h-48 overflow-y-auto space-y-1",
+                                                        {
+                                                            let search = prize_judge_search.read().to_lowercase();
+                                                            let assigned_ids: Vec<i32> = selected_prize_judges
+                                                                .read()
+                                                                .iter()
+                                                                .map(|j| j.user_id)
+                                                                .collect();
+                                                            let filtered: Vec<_> = available_users
+                                                                .read()
+                                                                .iter()
+                                                                .filter(|(id, name)| {
+                                                                    !assigned_ids.contains(id) && name.to_lowercase().contains(&search)
+                                                                })
+                                                                .take(10)
+                                                                .cloned()
+                                                                .collect();
+                                                            rsx! {
+                                                                for (id , name) in filtered {
+                                                                    {
+                                                                        let slug = slug.clone();
+                                                                        let refresh = refresh.clone();
+                                                                        let prize_id = selected_prize.read().as_ref().map(|p| p.id).unwrap_or_default();
+                                                                        rsx! {
+                                                                            button {
+                                                                                class: "w-full text-left px-3 py-2 hover:bg-background-neutral-secondary-enabled rounded cursor-pointer",
+                                                                                onclick: move |_| {
+                                                                                    let slug = slug.clone();
+                                                                                    let refresh = refresh.clone();
+                                                                                    spawn(async move {
+                                                                                        let request = AssignJudgesRequest {
+                                                                                            judge_ids: vec![id],
+                                                                                        };
+                                                                                        if assign_prize_judges(slug.clone(), prize_id, request).await.is_ok() {
+                                                                                            refresh();
+                                                                                            if let Ok(p) = get_prizes_with_judges(slug).await {
+                                                                                                prizes_with_judges.set(p.clone());
+                                                                                                let judges = p
+                                                                                                    .iter()
+                                                                                                    .find(|pwj| pwj.prize.id == prize_id)
+                                                                                                    .map(|pwj| pwj.judges.clone())
+                                                                                                    .unwrap_or_default();
+                                                                                                selected_prize_judges.set(judges);
+                                                                                            }
+                                                                                            show_prize_judge_picker.set(false);
+                                                                                            prize_judge_search.set(String::new());
+                                                                                        }
+                                                                                    });
+                                                                                },
+                                                                                "{name}"
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            if !selected_prize_judges.read().is_empty() {
+                                                {
+                                                    let slug = slug.clone();
+                                                    let refresh = refresh.clone();
+                                                    rsx! {
+                                                        div { class: "mt-4 pt-4 border-t border-stroke-neutral-1",
+                                                            Button {
+                                                                variant: ButtonVariant::Secondary,
+                                                                onclick: move |_| {
+                                                                    let slug = slug.clone();
+                                                                    let refresh = refresh.clone();
+                                                                    let prize_id = selected_prize.read().as_ref().map(|p| p.id).unwrap_or_default();
+                                                                    spawn(async move {
+                                                                        if make_prize_default(slug.clone(), prize_id).await.is_ok() {
+                                                                            refresh();
+                                                                            selected_prize_judges.set(Vec::new());
+                                                                            if let Ok(p) = get_prizes_with_judges(slug).await {
+                                                                                prizes_with_judges.set(p);
+                                                                            }
+                                                                        }
+                                                                    });
+                                                                },
+                                                                "Make Default (All Judges)"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }

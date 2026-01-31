@@ -10,7 +10,7 @@ use crate::{
             },
             types::{
                 CompleteVisitRequest, CurrentProject, FeatureComparison, JudgeFeatureState,
-                SubmitComparisonsRequest, UnifiedJudgingState,
+                PrizeInfo, SubmitComparisonsRequest, UnifiedJudgingState,
             },
         },
     },
@@ -321,8 +321,8 @@ pub fn HackathonJudge(slug: String) -> Element {
                     }
                 }
 
-                if s.features.is_empty() {
-                    // No features assigned
+                if s.assigned_prizes.is_empty() {
+                    // No prizes assigned
                     div { class: "p-6 bg-background-neutral-tertiary-enabled rounded-lg text-center",
                         p { class: "text-foreground-neutral-secondary",
                             "You haven't been assigned to any prizes yet. Please contact an organizer."
@@ -331,7 +331,7 @@ pub fn HackathonJudge(slug: String) -> Element {
                 } else if s.current_project.is_none() {
                     // Pre-judging state - show assigned prizes
                     PreJudgingView {
-                        features: s.features.clone(),
+                        prizes: s.assigned_prizes.clone(),
                         loading: *loading.read(),
                         on_start: start_judging,
                     }
@@ -362,11 +362,7 @@ pub fn HackathonJudge(slug: String) -> Element {
 
 /// Pre-judging view showing assigned prizes
 #[component]
-fn PreJudgingView(
-    features: Vec<JudgeFeatureState>,
-    loading: bool,
-    on_start: EventHandler<()>,
-) -> Element {
+fn PreJudgingView(prizes: Vec<PrizeInfo>, loading: bool, on_start: EventHandler<()>) -> Element {
     rsx! {
         div { class: "max-w-6xl mx-auto",
             h1 { class: "text-2xl font-semibold text-foreground-neutral-primary mb-6",
@@ -378,15 +374,15 @@ fn PreJudgingView(
             }
 
             div { class: "grid grid-cols-1 md:grid-cols-3 gap-4 mb-8",
-                for (i, feature) in features.iter().enumerate() {
+                for (i, prize) in prizes.iter().enumerate() {
                     div {
-                        key: "{feature.feature_id}",
+                        key: "{prize.id}",
                         class: "p-4 {PRIZE_COLORS[i % PRIZE_COLORS.len()]} rounded-lg flex items-center justify-between",
                         div {
                             p { class: "font-medium text-foreground-neutral-primary",
-                                "{feature.feature_name}"
+                                "{prize.name}"
                             }
-                            if let Some(desc) = &feature.feature_description {
+                            if let Some(desc) = &prize.description {
                                 p { class: "text-sm text-foreground-neutral-secondary mt-1",
                                     "{desc}"
                                 }
