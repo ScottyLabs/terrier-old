@@ -135,6 +135,8 @@ pub async fn update_feature(
 
     let hackathon = ctx.hackathon()?;
 
+    Permissions::require_admin_or_organizer(&ctx).await?;
+
     // Find the feature
     let existing = feature::Entity::find_by_id(feature_id)
         .one(&ctx.state.db)
@@ -191,6 +193,8 @@ pub async fn delete_feature(slug: String, feature_id: i32) -> Result<(), ServerF
         .await?;
 
     let hackathon = ctx.hackathon()?;
+
+    Permissions::require_admin_or_organizer(&ctx).await?;
 
     // Find the feature
     let existing = feature::Entity::find_by_id(feature_id)

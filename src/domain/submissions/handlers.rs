@@ -296,13 +296,24 @@ pub async fn set_table_number(slug: String, table_number: String) -> Result<(), 
         .map_err(|e| ServerFnError::new(format!("Failed to fetch submission: {}", e)))?
         .ok_or_else(|| ServerFnError::new("No submission found. Submit a project first."))?;
 
-    // Validate table number is a positive integer
-    let parsed: i32 = table_number
-        .parse()
-        .map_err(|_| ServerFnError::new("Table number must be a valid integer"))?;
-    if parsed <= 0 {
+    // Validate table number
+    // Allow alphanumeric (e.g. "A12", "B4"), but if it's purely numeric, ensure it's positive
+    if table_number.chars().all(|c| c.is_numeric()) {
+        let parsed: i32 = table_number
+            .parse()
+            .map_err(|_| ServerFnError::new("Table number must be a valid integer"))?;
+        if parsed <= 0 {
+            return Err(ServerFnError::new(
+                "Table number must be a positive integer",
+            ));
+        }
+    } else if !table_number
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        // Basic sanity check for alphanumeric format
         return Err(ServerFnError::new(
-            "Table number must be a positive integer",
+            "Table number must contain only letters, numbers, hyphens, or underscores",
         ));
     }
 

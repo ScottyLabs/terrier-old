@@ -288,11 +288,13 @@ pub async fn update_prize(
     }
 
     // Find the prize
+    // Find the prize
     let prize_model = prize::Entity::find_by_id(id)
+        .filter(prize::Column::HackathonId.eq(hackathon.id))
         .one(&ctx.state.db)
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to find prize: {}", e)))?
-        .ok_or_else(|| ServerFnError::new("Prize not found"))?;
+        .ok_or_else(|| ServerFnError::new("Prize not found in this hackathon"))?;
 
     // Start transaction
     let txn = ctx
@@ -516,6 +518,15 @@ pub async fn update_prize_feature_weights(
         .begin()
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to start transaction: {}", e)))?;
+
+    // Verify prize exists and belongs to this hackathon
+    use crate::entities::prize;
+    let prize = prize::Entity::find_by_id(id)
+        .filter(prize::Column::HackathonId.eq(hackathon.id))
+        .one(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to find prize: {}", e)))?
+        .ok_or_else(|| ServerFnError::new("Prize not found in this hackathon"))?;
 
     // Delete existing weights
     prize_feature_weight::Entity::delete_many()
