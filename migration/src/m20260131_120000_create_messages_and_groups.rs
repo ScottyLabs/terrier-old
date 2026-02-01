@@ -129,6 +129,7 @@ pub enum Messages {
     Id,
     SenderUserId,
     MessageGroupId,
+    Title,
     Content,
     CreatedAt,
     UpdatedAt,

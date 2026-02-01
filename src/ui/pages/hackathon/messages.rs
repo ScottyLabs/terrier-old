@@ -411,7 +411,7 @@ pub fn HackathonMessages(slug: String) -> Element {
                                 MessageItem {
                                     id: None,
                                     title: m
-                                        .content
+                                        .title
                                         .split('.')
                                         .next()
                                         .unwrap_or("Announcement")
@@ -831,6 +831,7 @@ pub fn HackathonMessages(slug: String) -> Element {
                                                                 sender_user_id: user_id,
                                                                 recipient_id: r_id,
                                                                 recipient_type: Some(r_type.clone()),
+                                                                title: new_title.read().clone(),
                                                                 content: new_content.read().clone(),
                                                             };
 
@@ -844,7 +845,7 @@ pub fn HackathonMessages(slug: String) -> Element {
                                                                             .map(|m| MessageItem {
                                                                                 id: None,
                                                                                 title: m
-                                                                                    .content
+                                                                                    .title
                                                                                     .split('.')
                                                                                     .next()
                                                                                     .unwrap_or("Announcement")

@@ -27,6 +27,7 @@ pub struct MessageResponse {
     pub message_group_id: i32,
     pub recipient_type: Option<String>,
     pub recipient_id: Option<i32>,
+    pub title: String,
     pub content: String,
     pub created_at: chrono::NaiveDateTime,
 }
@@ -39,6 +40,7 @@ pub struct CreateMessageRequest {
     pub recipient_id: Option<i32>,
     /// "all" | "team" | "user"
     pub recipient_type: Option<String>,
+    pub title: String,
     pub content: String,
 }
 
@@ -110,6 +112,7 @@ pub async fn create_message(slug: String, req: CreateMessageRequest) -> Result<(
     let new_msg = messages::ActiveModel {
         sender_user_id: Set(req.sender_user_id),
         message_group_id: Set(group_id),
+        title: Set(req.title),
         content: Set(req.content),
         created_at: Set(chrono::Utc::now().naive_utc()),
         updated_at: Set(chrono::Utc::now().naive_utc()),
@@ -217,6 +220,7 @@ pub async fn get_messages(
             message_group_id: m.message_group_id,
             recipient_type: rtype,
             recipient_id: rid,
+            title: m.title,
             content: m.content,
             created_at: m.created_at,
         });

@@ -25,6 +25,8 @@ pub struct Model {
     pub sender_user_id: i32,
     pub message_group_id: i32,
     #[sea_orm(column_type = "Text")]
+    pub title: String,
+    #[sea_orm(column_type = "Text")]
     pub content: String,
     pub created_at: DateTime,
     pub updated_at: DateTime,
