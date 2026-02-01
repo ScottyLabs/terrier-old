@@ -559,8 +559,6 @@ pub fn HackathonPrizeTracks(slug: String) -> Element {
                                                                 class: "w-20 px-2 h-8 bg-background-neutral-primary rounded border border-border-neutral-primary text-sm text-right",
                                                                 r#type: "number",
                                                                 step: "0.01",
-                                                                min: "0",
-                                                                max: "1",
                                                                 value: "{w.weight}",
                                                                 oninput: move |e| {
                                                                     if let Ok(val) = e.value().parse::<f32>() {
@@ -593,15 +591,7 @@ pub fn HackathonPrizeTracks(slug: String) -> Element {
 
                                 {
                                     let total: f32 = editing_weights().iter().map(|w| w.weight).sum();
-                                    let weight_class = if (total - 1.0).abs() > 0.001
-
-                                        && !editing_weights().is_empty()
-                                    {
-
-                                        "text-status-danger-foreground"
-                                    } else {
-                                        "text-foreground-neutral-secondary"
-                                    };
+                                    let weight_class = "text-foreground-neutral-secondary";
                                     rsx! {
                                         div { class: "mt-4 flex justify-between items-center text-sm",
                                             span { class: "{weight_class}", "Total Weight: {total:.2}" }
@@ -610,20 +600,12 @@ pub fn HackathonPrizeTracks(slug: String) -> Element {
                                             }
                                             Button {
                                                 size: ButtonSize::Compact,
-                                                disabled: (total - 1.0).abs() > 0.001 && !editing_weights().is_empty(),
                                                 onclick: {
                                                     let slug = slug.clone();
                                                     move |_| {
                                                         let slug = slug.clone();
                                                         spawn(async move {
                                                             let weights = editing_weights();
-                                                            if !weights.is_empty() {
-                                                                let total: f32 = weights.iter().map(|w| w.weight).sum();
-                                                                if (total - 1.0).abs() > 0.001 {
-                                                                    weight_error.set(Some("Weights must sum to 1.0".to_string()));
-                                                                    return;
-                                                                }
-                                                            }
 
 
                                                             match update_prize_feature_weights(

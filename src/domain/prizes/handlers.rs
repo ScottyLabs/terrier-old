@@ -507,7 +507,7 @@ pub async fn delete_prize(slug: String, id: i32) -> Result<(), ServerFnError> {
     request_body = UpdatePrizeFeatureWeightsRequest,
     responses(
         (status = 200, description = "Weights updated successfully"),
-        (status = 400, description = "Invalid weights (must sum to 1)"),
+        (status = 400, description = "Invalid request"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden - admin/organizer only"),
         (status = 404, description = "Prize not found"),
