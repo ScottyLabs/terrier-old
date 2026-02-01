@@ -118,10 +118,10 @@ pub fn QRModal(
                         Scanner { on_scan: handler }
                     } else {
                         div {
-                            class: "w-full h-full bg-background-neutral-primary rounded-2xl",
+                            class: "w-full h-full rounded-2xl",
                             dangerous_inner_html: "{qr_svg}",
                         }
-                        div { class: "text-white font-semibold text-lg", "User ID: {user_id}" }
+                        div { class: "text-foreground-neutral-primary font-semibold text-lg", "User ID: {user_id}" }
                     }
                 }
             }

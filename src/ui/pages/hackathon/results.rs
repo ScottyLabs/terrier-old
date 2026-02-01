@@ -1,7 +1,9 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::{
     Icon,
-    icons::ld_icons::{LdChevronDown, LdClipboard, LdLoader, LdSparkles},
+    icons::ld_icons::{
+        LdArrowUpDown, LdChevronDown, LdChevronUp, LdClipboard, LdLoader, LdSearch, LdSparkles,
+    },
 };
 
 use crate::{
@@ -15,6 +17,24 @@ use crate::{
     },
     ui::foundation::modals::base::ModalBase,
 };
+
+// Sorting types
+#[derive(Clone, Copy, PartialEq, Default)]
+enum SortColumn {
+    #[default]
+    Score,
+    ProjectName,
+    TeamName,
+    Table,
+    Feature(i32),
+}
+
+#[derive(Clone, Copy, PartialEq, Default)]
+enum SortDirection {
+    Asc,
+    #[default]
+    Desc,
+}
 
 #[component]
 pub fn HackathonResults(slug: String) -> Element {
@@ -83,9 +103,11 @@ pub fn HackathonResults(slug: String) -> Element {
 
     rsx! {
         div { class: "flex flex-col h-full",
-            // Header
-            h1 { class: "text-[30px] font-semibold leading-[38px] text-foreground-neutral-primary pt-11 pb-7",
-                "Results"
+            // Header - sticky
+            div { class: "sticky top-0 z-10",
+                h1 { class: "text-[30px] font-semibold leading-[38px] text-foreground-neutral-primary pt-11 pb-7",
+                    "Results"
+                }
             }
 
             // Prize selector dropdown
@@ -184,70 +206,303 @@ fn ResultsTable(
     results: PrizeTrackResults,
     on_project_click: EventHandler<ProjectResultInfo>,
 ) -> Element {
+    // Sorting state
+    let mut sort_column: Signal<SortColumn> = use_signal(SortColumn::default);
+    let mut sort_direction: Signal<SortDirection> = use_signal(SortDirection::default);
+
+    // Search state
+    let mut search_query: Signal<String> = use_signal(String::new);
+
+    // Filter and sort projects
+    let filtered_projects: Vec<ProjectResultInfo> = {
+        let query = search_query().to_lowercase();
+        let mut projects: Vec<_> = results
+            .projects
+            .iter()
+            .filter(|p| {
+                if query.is_empty() {
+                    true
+                } else {
+                    p.project_name
+                        .as_ref()
+                        .map(|n| n.to_lowercase().contains(&query))
+                        .unwrap_or(false)
+                        || p.team_name.to_lowercase().contains(&query)
+                }
+            })
+            .cloned()
+            .collect();
+
+        // Sort
+        let col = sort_column();
+        let dir = sort_direction();
+        projects.sort_by(|a, b| {
+            let ordering = match col {
+                SortColumn::ProjectName => {
+                    let a_name = a.project_name.as_deref().unwrap_or("");
+                    let b_name = b.project_name.as_deref().unwrap_or("");
+                    a_name.to_lowercase().cmp(&b_name.to_lowercase())
+                }
+                SortColumn::TeamName => a.team_name.to_lowercase().cmp(&b.team_name.to_lowercase()),
+                SortColumn::Table => {
+                    let a_table = a.table_number.as_deref().unwrap_or("");
+                    let b_table = b.table_number.as_deref().unwrap_or("");
+                    // Try to parse as numbers for numeric sort
+                    match (a_table.parse::<i32>(), b_table.parse::<i32>()) {
+                        (Ok(a_num), Ok(b_num)) => a_num.cmp(&b_num),
+                        _ => a_table.cmp(b_table),
+                    }
+                }
+                SortColumn::Score => {
+                    let a_score = a.weighted_score.unwrap_or(0.0);
+                    let b_score = b.weighted_score.unwrap_or(0.0);
+                    a_score
+                        .partial_cmp(&b_score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                }
+                SortColumn::Feature(feature_id) => {
+                    let a_rank = a
+                        .feature_ranks
+                        .iter()
+                        .find(|r| r.feature_id == feature_id)
+                        .and_then(|r| r.rank)
+                        .unwrap_or(i32::MAX);
+                    let b_rank = b
+                        .feature_ranks
+                        .iter()
+                        .find(|r| r.feature_id == feature_id)
+                        .and_then(|r| r.rank)
+                        .unwrap_or(i32::MAX);
+                    a_rank.cmp(&b_rank)
+                }
+            };
+            match dir {
+                SortDirection::Asc => ordering,
+                SortDirection::Desc => ordering.reverse(),
+            }
+        });
+        projects
+    };
+
+    // Helper component for sortable header
+    let render_sort_icon = |col: SortColumn| -> Element {
+        let current_col = sort_column();
+        let current_dir = sort_direction();
+        if current_col == col {
+            match current_dir {
+                SortDirection::Asc => rsx! {
+                    Icon {
+                        width: 14,
+                        height: 14,
+                        icon: LdChevronUp,
+                        class: "text-foreground-brand-primary",
+                    }
+                },
+                SortDirection::Desc => rsx! {
+                    Icon {
+                        width: 14,
+                        height: 14,
+                        icon: LdChevronDown,
+                        class: "text-foreground-brand-primary",
+                    }
+                },
+            }
+        } else {
+            rsx! {
+                Icon {
+                    width: 14,
+                    height: 14,
+                    icon: LdArrowUpDown,
+                    class: "text-foreground-neutral-tertiary",
+                }
+            }
+        }
+    };
+
     rsx! {
-        div { class: "overflow-x-auto",
-            table { class: "w-full",
-                thead {
-                    tr { class: "border-b border-stroke-neutral-1",
-                        th { class: "text-left py-3 px-2 text-sm font-semibold text-foreground-neutral-primary",
-                            "Project Name"
-                        }
-                        th { class: "text-left py-3 px-2 text-sm font-semibold text-foreground-neutral-primary",
-                            "Team Name"
-                        }
-                        th { class: "text-left py-3 px-2 text-sm font-semibold text-foreground-neutral-primary",
-                            "Table"
-                        }
-                        th { class: "text-left py-3 px-2 text-sm font-semibold text-foreground-neutral-primary",
-                            "Score"
-                            span { class: "ml-1 text-xs text-foreground-neutral-tertiary",
-                                "ⓘ"
-                            }
-                        }
-                        // Dynamic feature columns
-                        for feature in results.features.iter() {
+        div { class: "space-y-4",
+            // Search input
+            div { class: "h-10 max-w-xs border border-stroke-neutral-1 rounded-full flex items-center px-3 py-1",
+                Icon {
+                    width: 20,
+                    height: 20,
+                    icon: LdSearch,
+                    class: "text-foreground-neutral-tertiary",
+                }
+                input {
+                    r#type: "text",
+                    class: "flex-1 px-2.5 text-sm leading-5 text-foreground-neutral-primary placeholder:text-foreground-neutral-tertiary outline-none bg-transparent",
+                    placeholder: "Search projects...",
+                    value: "{search_query}",
+                    oninput: move |evt| search_query.set(evt.value()),
+                }
+            }
+
+            // Table
+            div { class: "overflow-x-auto",
+                table { class: "w-full",
+                    thead {
+                        tr { class: "border-b border-stroke-neutral-1",
                             th {
-                                key: "{feature.id}",
-                                class: "text-left py-3 px-2 text-sm font-semibold text-foreground-neutral-primary",
-                                "{feature.name}"
+                                class: "text-left py-3 px-2 text-sm font-semibold text-foreground-neutral-primary cursor-pointer hover:bg-background-neutral-secondary-enabled select-none",
+                                onclick: move |_| {
+                                    let col = SortColumn::ProjectName;
+                                    if sort_column() == col {
+                                        sort_direction
+                                            .set(
+                                                match sort_direction() {
+                                                    SortDirection::Asc => SortDirection::Desc,
+                                                    SortDirection::Desc => SortDirection::Asc,
+                                                },
+                                            );
+                                    } else {
+                                        sort_column.set(col);
+                                        sort_direction.set(SortDirection::Desc);
+                                    }
+                                },
+                                div { class: "flex items-center gap-1",
+                                    "Project Name"
+                                    {render_sort_icon(SortColumn::ProjectName)}
+                                }
+                            }
+                            th {
+                                class: "text-left py-3 px-2 text-sm font-semibold text-foreground-neutral-primary cursor-pointer hover:bg-background-neutral-secondary-enabled select-none",
+                                onclick: move |_| {
+                                    let col = SortColumn::TeamName;
+                                    if sort_column() == col {
+                                        sort_direction
+                                            .set(
+                                                match sort_direction() {
+                                                    SortDirection::Asc => SortDirection::Desc,
+                                                    SortDirection::Desc => SortDirection::Asc,
+                                                },
+                                            );
+                                    } else {
+                                        sort_column.set(col);
+                                        sort_direction.set(SortDirection::Desc);
+                                    }
+                                },
+                                div { class: "flex items-center gap-1",
+                                    "Team Name"
+                                    {render_sort_icon(SortColumn::TeamName)}
+                                }
+                            }
+                            th {
+                                class: "text-left py-3 px-2 text-sm font-semibold text-foreground-neutral-primary cursor-pointer hover:bg-background-neutral-secondary-enabled select-none",
+                                onclick: move |_| {
+                                    let col = SortColumn::Table;
+                                    if sort_column() == col {
+                                        sort_direction
+                                            .set(
+                                                match sort_direction() {
+                                                    SortDirection::Asc => SortDirection::Desc,
+                                                    SortDirection::Desc => SortDirection::Asc,
+                                                },
+                                            );
+                                    } else {
+                                        sort_column.set(col);
+                                        sort_direction.set(SortDirection::Desc);
+                                    }
+                                },
+                                div { class: "flex items-center gap-1",
+                                    "Table"
+                                    {render_sort_icon(SortColumn::Table)}
+                                }
+                            }
+                            th {
+                                class: "text-left py-3 px-2 text-sm font-semibold text-foreground-neutral-primary cursor-pointer hover:bg-background-neutral-secondary-enabled select-none",
+                                onclick: move |_| {
+                                    let col = SortColumn::Score;
+                                    if sort_column() == col {
+                                        sort_direction
+                                            .set(
+                                                match sort_direction() {
+                                                    SortDirection::Asc => SortDirection::Desc,
+                                                    SortDirection::Desc => SortDirection::Asc,
+                                                },
+                                            );
+                                    } else {
+                                        sort_column.set(col);
+                                        sort_direction.set(SortDirection::Desc);
+                                    }
+                                },
+                                div { class: "flex items-center gap-1",
+                                    "Score"
+                                    {render_sort_icon(SortColumn::Score)}
+                                }
+                            }
+                            // Dynamic feature columns
+                            for feature in results.features.iter() {
+                                {
+                                    let feature_id = feature.id;
+                                    let feature_name = feature.name.clone();
+                                    rsx! {
+                                        th {
+                                            key: "{feature.id}",
+                                            class: "text-left py-3 px-2 text-sm font-semibold text-foreground-neutral-primary cursor-pointer hover:bg-background-neutral-secondary-enabled select-none",
+                                            onclick: move |_| {
+                                                let col = SortColumn::Feature(feature_id);
+                                                if sort_column() == col {
+                                                    sort_direction
+                                                        .set(
+                                                            match sort_direction() {
+                                                                SortDirection::Asc => SortDirection::Desc,
+                                                                SortDirection::Desc => SortDirection::Asc,
+                                                            },
+                                                        );
+                                                } else {
+                                                    sort_column.set(col);
+                                                    sort_direction.set(SortDirection::Desc);
+                                                }
+                                            },
+                                            div { class: "flex items-center gap-1",
+                                                "{feature_name}"
+                                                {render_sort_icon(SortColumn::Feature(feature_id))}
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
-                }
-                tbody {
-                    if results.projects.is_empty() {
-                        tr {
-                            td {
-                                colspan: "{4 + results.features.len()}",
-                                class: "text-center py-8 text-foreground-neutral-secondary",
-                                "No submissions yet"
+                    tbody {
+                        if filtered_projects.is_empty() {
+                            tr {
+                                td {
+                                    colspan: "{4 + results.features.len()}",
+                                    class: "text-center py-8 text-foreground-neutral-secondary",
+                                    if search_query().is_empty() {
+                                        "No submissions yet"
+                                    } else {
+                                        "No projects match your search"
+                                    }
+                                }
                             }
-                        }
-                    } else {
-                        for project in results.projects.iter() {
-                            {
-                                let project_clone = project.clone();
-                                rsx! {
-                                    tr {
-                                        key: "{project.submission_id}",
-                                        class: "border-b border-stroke-neutral-1 hover:bg-background-neutral-secondary-enabled cursor-pointer transition-colors",
-                                        onclick: move |_| on_project_click.call(project_clone.clone()),
-                                        td { class: "py-3 px-2 text-sm text-foreground-neutral-primary",
-                                            {project.project_name.clone().unwrap_or_else(|| "Untitled".to_string())}
-                                        }
-                                        // Feature rank columns
-                                        td { class: "py-3 px-2 text-sm text-foreground-neutral-primary", "{project.team_name}" }
-                                        td { class: "py-3 px-2 text-sm text-foreground-neutral-primary font-mono",
-                                            {project.table_number.clone().unwrap_or_else(|| "-".to_string())}
-                                        }
-                                        td { class: "py-3 px-2 text-sm text-foreground-neutral-primary",
-                                            {format!("{:.2}", project.weighted_score.unwrap_or(0.0))}
-                                        }
-                                        for rank_info in project.feature_ranks.iter() {
-                                            td {
-                                                key: "{rank_info.feature_id}",
-                                                class: "py-3 px-2 text-sm text-foreground-neutral-primary",
-                                                {rank_info.rank.map(|r| format!("#{}", r)).unwrap_or_else(|| "-".to_string())}
+                        } else {
+                            for project in filtered_projects.iter() {
+                                {
+                                    let project_clone = project.clone();
+                                    rsx! {
+                                        tr {
+                                            key: "{project.submission_id}",
+                                            class: "border-b border-stroke-neutral-1 hover:bg-background-neutral-secondary-enabled cursor-pointer transition-colors",
+                                            onclick: move |_| on_project_click.call(project_clone.clone()),
+                                            td { class: "py-3 px-2 text-sm text-foreground-neutral-primary",
+                                                {project.project_name.clone().unwrap_or_else(|| "Untitled".to_string())}
+                                            }
+                                            td { class: "py-3 px-2 text-sm text-foreground-neutral-primary", "{project.team_name}" }
+                                            td { class: "py-3 px-2 text-sm text-foreground-neutral-primary font-mono",
+                                                {project.table_number.clone().unwrap_or_else(|| "-".to_string())}
+                                            }
+                                            td { class: "py-3 px-2 text-sm text-foreground-neutral-primary",
+                                                {format!("{:.2}", project.weighted_score.unwrap_or(0.0))}
+                                            }
+                                            for rank_info in project.feature_ranks.iter() {
+                                                td {
+                                                    key: "{rank_info.feature_id}",
+                                                    class: "py-3 px-2 text-sm text-foreground-neutral-primary",
+                                                    {rank_info.rank.map(|r| format!("#{}", r)).unwrap_or_else(|| "-".to_string())}
+                                                }
                                             }
                                         }
                                     }
@@ -303,10 +558,44 @@ fn ProjectDetailModal(
                     h2 { class: "text-2xl font-semibold text-foreground-neutral-primary",
                         {project.project_name.clone().unwrap_or_else(|| "Untitled Project".to_string())}
                     }
-                    button {
-                        class: "p-2 text-foreground-neutral-tertiary hover:text-foreground-neutral-primary transition-colors",
-                        title: "Copy project info",
-                        Icon { width: 20, height: 20, icon: LdClipboard }
+                    {
+                        let project_name_copy = project
+                            .project_name
+                            .clone()
+                            .unwrap_or_else(|| "Untitled Project".to_string());
+                        let team_name_copy = project.team_name.clone();
+                        let table_copy = project.table_number.clone().unwrap_or_else(|| "-".to_string());
+                        let score_copy = project
+                            .weighted_score
+                            .map(|s| format!("{:.2}", s))
+                            .unwrap_or_else(|| "-".to_string());
+                        let desc_copy = project
+                            .description
+                            .clone()
+                            .unwrap_or_else(|| "No description".to_string());
+                        rsx! {
+                            button {
+                                class: "p-2 text-foreground-neutral-tertiary hover:text-foreground-neutral-primary transition-colors",
+                                title: "Copy project info",
+                                onclick: move |_| {
+                                    let text = format!(
+                                        "Project: {}\nTeam: {}\nTable: {}\nScore: {}\n\n{}",
+                                        project_name_copy,
+                                        team_name_copy,
+                                        table_copy,
+                                        score_copy,
+                                        desc_copy,
+                                    );
+                                    let _ = document::eval(
+                                        &format!(
+                                            "navigator.clipboard.writeText({});",
+                                            serde_json::to_string(&text).unwrap_or_default(),
+                                        ),
+                                    );
+                                },
+                                Icon { width: 20, height: 20, icon: LdClipboard }
+                            }
+                        }
                     }
                 }
 

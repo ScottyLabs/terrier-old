@@ -24,7 +24,7 @@ pub fn PeopleModal(
         ModalBase {
             on_close,
             width: "798px",
-            max_height: "720px",
+            max_height: "calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 48px)",
 
             div { class: "flex flex-col",
                 div { class: "flex flex-col h-[565px] justify-between px-7 py-0",

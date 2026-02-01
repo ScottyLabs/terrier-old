@@ -551,13 +551,7 @@ pub async fn update_prize_feature_weights(
         ));
     }
 
-    // Validate weights sum to 1.0 (allow small epsilon)
-    let sum: f32 = request.weights.iter().map(|w| w.weight).sum();
-    if (sum - 1.0).abs() > 0.001 {
-        return Err(ServerFnError::new(
-            "Feature weights must sum to exactly 1.0",
-        ));
-    }
+    // No validation on weight sum - any values including negative are allowed
 
     // Transaction
     let txn = ctx

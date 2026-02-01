@@ -51,6 +51,8 @@ pub fn HackathonJudge(slug: String) -> Element {
         use_signal(|| std::collections::HashSet::new());
     // Track project-level notes
     let mut project_notes: Signal<String> = use_signal(|| String::new());
+    // Track whether submit is in cooldown (prevents double-click)
+    let mut submit_cooldown: Signal<bool> = use_signal(|| false);
 
     // Fetch unified state on mount
     let slug_clone = slug.clone();
@@ -130,6 +132,18 @@ pub fn HackathonJudge(slug: String) -> Element {
 
             if let Some(s) = current_state {
                 if let Some(project) = s.current_project {
+                    // Check cooldown - if already in cooldown, ignore click
+                    if *submit_cooldown.read() {
+                        return;
+                    }
+                    // Set cooldown immediately
+                    submit_cooldown.set(true);
+                    // Reset cooldown after 1 second
+                    spawn(async move {
+                        gloo_timers::future::TimeoutFuture::new(1000).await;
+                        submit_cooldown.set(false);
+                    });
+
                     spawn(async move {
                         loading.set(true);
                         error_msg.set(None);
@@ -181,8 +195,19 @@ pub fn HackathonJudge(slug: String) -> Element {
                                             }
                                             selections.set(new_selections);
                                             state.set(Some(new_state));
+
+                                            // Scroll to top to indicate new project
+                                            let _ = document::eval(
+                                                "window.scrollTo({ top: 0, behavior: 'smooth' });",
+                                            );
                                         }
-                                        success_msg.set(None);
+                                        // Show brief "Next project" message
+                                        success_msg
+                                            .set(Some("Moving to next project...".to_string()));
+                                        spawn(async move {
+                                            gloo_timers::future::TimeoutFuture::new(1500).await;
+                                            success_msg.set(None);
+                                        });
                                     }
                                     Ok(None) => {
                                         success_msg.set(Some(
@@ -378,13 +403,13 @@ fn PreJudgingView(
             }
 
             if all_prizes.is_empty() {
-                div { class: "mb-8 p-12 text-center bg-background-neutral-secondary-enabled rounded-xl border border-dashed border-stroke-neutral-2",
+                div { class: "mb-8 p-12 text-center bg-background-neutral-primary rounded-xl border border-dashed border-stroke-neutral-2",
                     p { class: "text-foreground-neutral-secondary",
                         "No prize tracks found for this hackathon."
                     }
                 }
             } else {
-                div { class: "mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6 bg-background-neutral-secondary-enabled rounded-xl",
+                div { class: "mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6 bg-background-neutral-primary rounded-xl",
                     for prize in all_prizes.iter() {
                         {
                             let is_assigned = assigned_ids.contains(&prize.id);
@@ -393,25 +418,26 @@ fn PreJudgingView(
                             let mut state_setter = state_setter.clone();
 
                             let card_class = if is_assigned {
-                                "relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 border-stroke-brand-primary bg-background-brand-primary-enabled"
+                                "relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 border-stroke-brand-primary bg-background-neutral-primary"
                             } else {
-                                "relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 border-stroke-neutral-1 bg-background-neutral-primary hover:border-stroke-neutral-2"
+                                "relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 border-stroke-neutral-1 bg-background-brand-primary-enabled hover:border-stroke-neutral-2"
                             };
 
                             let check_class = if is_assigned {
-                                "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors bg-foreground-brand-primary border-foreground-brand-primary"
+                                "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors bg-foreground-brand-primary"
                             } else {
-                                "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors border-stroke-neutral-2 bg-transparent"
+                                "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors border-stroke-neutral-2 border-foreground-brand-primary  bg-transparent"
                             };
 
+                            // Use foreground-brand-primary for better contrast on selected cards
                             let title_class = if is_assigned {
-                                "font-medium text-black text-lg"
+                                "font-medium text-foreground-brand-primary text-lg"
                             } else {
                                 "font-medium text-foreground-neutral-primary text-lg"
                             };
 
                             let desc_class = if is_assigned {
-                                "text-sm text-black/80 mt-1"
+                                "text-sm text-foreground-brand-secondary mt-1"
                             } else {
                                 "text-sm text-foreground-neutral-secondary mt-1"
                             };
@@ -441,7 +467,7 @@ fn PreJudgingView(
                                         div { class: "{check_class}",
                                             if is_assigned {
                                                 svg {
-                                                    class: "w-4 h-4 text-white",
+                                                    class: "w-4 h-4 text-black",
                                                     fill: "none",
                                                     stroke: "currentColor",
                                                     view_box: "0 0 24 24",
@@ -463,7 +489,7 @@ fn PreJudgingView(
             }
 
             // Walk type selector
-            div { class: "mb-8 p-6 bg-background-neutral-secondary-enabled rounded-xl",
+            div { class: "mb-8 p-6 bg-background-neutral-primary rounded-xl",
                 h3 { class: "font-medium text-foreground-neutral-primary mb-3", "Routing Algorithm" }
                 p { class: "text-sm text-foreground-neutral-secondary mb-4",
                     "Choose how you'd like to be routed to projects:"
@@ -503,9 +529,9 @@ fn PreJudgingView(
                         let mut state_setter_proximity = state_setter.clone();
                         let is_proximity = walk_type == WalkType::Proximity;
                         let proximity_class = if is_proximity {
-                            "px-4 py-2 rounded-lg border-2 cursor-pointer transition-all duration-200 border-stroke-brand-primary bg-background-brand-primary-enabled"
+                            "px-4 py-2 rounded-lg border-2 cursor-pointer transition-all duration-200 border-stroke-brand-primary bg-background-brand-primary"
                         } else {
-                            "px-4 py-2 rounded-lg border-2 cursor-pointer transition-all duration-200 border-stroke-neutral-1 bg-background-neutral-primary hover:border-stroke-neutral-2"
+                            "px-4 py-2 rounded-lg border-2 cursor-pointer transition-all duration-200 border-stroke-neutral-1 bg-background-brand-primary-enabled hover:border-stroke-neutral-2"
                         };
                         rsx! {
                             button {
@@ -684,8 +710,8 @@ fn InProgressView(
                 }
             }
 
-            // Submit button
-            div { class: "flex justify-center items-center gap-4",
+            // Submit button - with Safari safe area padding
+            div { class: "flex justify-center items-center gap-4 pb-[env(safe-area-inset-bottom,0px)]",
                 Button { disabled: loading, onclick: move |_| on_skip.call(()),
                     if loading {
                         "Skipping..."
@@ -819,33 +845,35 @@ fn PrizeCard(
                         }
 
                         div { class: "space-y-2",
-                            // Current project option
-                            label { class: "flex items-center gap-2 cursor-pointer",
-                                input {
-                                    r#type: "radio",
-                                    name: "feature-{feature_id}",
-                                    checked: selected_winner == Some(current_submission_id),
-                                    onchange: move |_| {
-                                        selections.write().insert(feature_id, current_submission_id);
-                                    },
-                                    class: "w-4 h-4 accent-black",
+                            // Current project option - larger clickable button
+                            button {
+                                class: "flex items-center gap-3 cursor-pointer w-full p-3 rounded-lg hover:bg-background-neutral-secondary transition-colors text-left",
+                                onclick: move |_| {
+                                    selections.write().insert(feature_id, current_submission_id);
+                                },
+                                div { class: if selected_winner == Some(current_submission_id) { "w-6 h-6 rounded-full border-2 border-black bg-black flex items-center justify-center" } else { "w-6 h-6 rounded-full border-2 border-stroke-neutral-primary bg-transparent" },
+                                    if selected_winner == Some(current_submission_id) {
+                                        div { class: "w-2.5 h-2.5 rounded-full bg-white" }
+                                    }
                                 }
-                                span { class: "text-foreground-neutral-primary", "{current_team_name}" }
+                                span { class: "text-foreground-neutral-primary font-medium",
+                                    "{current_team_name}"
+                                }
                             }
 
-                            // Previous best option
+                            // Previous best option - larger clickable button
                             if let Some(best_id) = feature.current_best_submission_id {
-                                label { class: "flex items-center gap-2 cursor-pointer",
-                                    input {
-                                        r#type: "radio",
-                                        name: "feature-{feature_id}",
-                                        checked: selected_winner == Some(best_id),
-                                        onchange: move |_| {
-                                            selections.write().insert(feature_id, best_id);
-                                        },
-                                        class: "w-4 h-4 accent-black",
+                                button {
+                                    class: "flex items-center gap-3 cursor-pointer w-full p-3 rounded-lg hover:bg-background-neutral-secondary transition-colors text-left",
+                                    onclick: move |_| {
+                                        selections.write().insert(feature_id, best_id);
+                                    },
+                                    div { class: if selected_winner == Some(best_id) { "w-6 h-6 rounded-full border-2 border-black bg-black flex items-center justify-center" } else { "w-6 h-6 rounded-full border-2 border-stroke-neutral-primary bg-transparent" },
+                                        if selected_winner == Some(best_id) {
+                                            div { class: "w-2.5 h-2.5 rounded-full bg-white" }
+                                        }
                                     }
-                                    span { class: "text-foreground-neutral-primary",
+                                    span { class: "text-foreground-neutral-primary font-medium",
                                         "{best_team_name}"
                                     }
                                 }
@@ -858,21 +886,30 @@ fn PrizeCard(
                         p { class: "text-sm text-foreground-neutral-secondary mb-2",
                             "This is the first project you're seeing for this prize."
                         }
-                        label { class: "flex items-center gap-2 cursor-pointer",
-                            input {
-                                r#type: "checkbox",
-                                checked: selected_winner == Some(current_submission_id),
-                                onchange: move |_| {
-                                    let mut sels = selections.write();
-                                    if sels.contains_key(&feature_id) {
-                                        sels.remove(&feature_id);
-                                    } else {
-                                        sels.insert(feature_id, current_submission_id);
+                        // Larger clickable area for checkbox
+                        button {
+                            class: "flex items-center gap-3 cursor-pointer w-full p-3 rounded-lg hover:bg-background-neutral-secondary transition-colors text-left",
+                            onclick: move |_| {
+                                let mut sels = selections.write();
+                                if sels.contains_key(&feature_id) {
+                                    sels.remove(&feature_id);
+                                } else {
+                                    sels.insert(feature_id, current_submission_id);
+                                }
+                            },
+                            div { class: if selected_winner == Some(current_submission_id) { "w-6 h-6 rounded border-2 border-black bg-black flex items-center justify-center" } else { "w-6 h-6 rounded border-2 border-stroke-neutral-primary bg-transparent" },
+                                if selected_winner == Some(current_submission_id) {
+                                    svg {
+                                        class: "w-4 h-4 text-black",
+                                        fill: "none",
+                                        stroke: "currentColor",
+                                        stroke_width: "3",
+                                        view_box: "0 0 24 24",
+                                        path { d: "M5 13l4 4L19 7" }
                                     }
-                                },
-                                class: "w-4 h-4 accent-black",
+                                }
                             }
-                            span { class: "text-foreground-neutral-primary",
+                            span { class: "text-foreground-neutral-primary font-medium",
                                 "Mark as current best for this prize"
                             }
                         }

@@ -779,9 +779,8 @@ pub async fn submit_comparisons(
 
     let hackathon = ctx.hackathon()?;
 
-    if !hackathon.judging_started {
-        return Err(ServerFnError::new("Judging has not started yet"));
-    }
+    // Note: We allow submission even if judging has ended, as long as the judge has an active visit
+    // This lets judges complete their last project when the event ends
 
     // Verify the visit belongs to this judge
     let visit = project_visit::Entity::find_by_id(request.visit_id)

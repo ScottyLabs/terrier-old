@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::{
     Icon,
-    icons::ld_icons::{LdChevronDown, LdLink, LdSearch},
+    icons::ld_icons::{LdChevronDown, LdSearch},
 };
 
 use crate::{
@@ -11,10 +11,8 @@ use crate::{
         update_person_role,
     },
     ui::{
-        features::people::{PeopleModal, PersonCard},
-        foundation::components::{
-            ButtonSize, ButtonWithIcon, Dropdown, DropdownOption, TabSwitcher,
-        },
+        features::people::PeopleModal,
+        foundation::components::{Dropdown, DropdownOption, TabSwitcher},
     },
 };
 
@@ -194,8 +192,6 @@ pub fn HackathonPeople(slug: String) -> Element {
                             }
                         }
                     }
-
-                    ButtonWithIcon::<LdLink> { icon: LdLink, size: ButtonSize::Compact, "Create Account Link" }
                 }
 
                 // People list

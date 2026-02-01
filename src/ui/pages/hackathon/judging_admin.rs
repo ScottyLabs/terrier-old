@@ -575,7 +575,7 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
 
                         if s.submissions_closed {
                             Button {
-                                variant: ButtonVariant::Secondary,
+                                variant: ButtonVariant::Default,
                                 disabled: *loading.read(),
                                 onclick: do_recalculate_rankings,
                                 if *loading.read() {
@@ -608,7 +608,7 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
 
             // Features section (only show when judging not started)
             if judging_not_started {
-                div { class: "flex flex-col lg:flex-row gap-6",
+                div { class: "flex flex-col lg:flex-row gap-6 mb-8",
                     // Left: Feature cards
                     div { class: "flex-1",
                         div { class: "p-6 bg-background-neutral-primary rounded-[20px]",
@@ -643,6 +643,9 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                                             "Edit"
                                                         }
                                                     }
+
+
+
 
                                                     if let Some(desc) = &feature.description {
                                                         p { class: "text-sm text-foreground-neutral-secondary line-clamp-3", "{desc}" }
@@ -737,7 +740,7 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
 
             // Prize Track Judges section (only show when judging not started)
             if judging_not_started {
-                div { class: "mt-8",
+                div { class: "mt-8 mb-8",
                     div { class: "flex flex-col lg:flex-row gap-6",
                         // Left: Prize track list
                         div { class: "flex-1",
@@ -775,6 +778,12 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                                             show_prize_judge_picker.set(false);
                                                             prize_judge_search.set(String::new());
                                                         },
+
+
+
+
+
+
 
 
 
@@ -860,6 +869,33 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                     // Update selected judges
 
                                     // Make Default button
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1077,7 +1113,7 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                                                 refresh();
                                                                 if let Ok(p) = get_prizes_with_judges(slug).await {
                                                                     prizes_with_judges.set(p.clone());
-                                                                        let judges = p
+                                                                    let judges = p
                                                                         .iter()
                                                                         .find(|pwj| pwj.prize.id == price_id_copy)
                                                                         .map(|pwj| pwj.judges.clone())

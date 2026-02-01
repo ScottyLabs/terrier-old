@@ -64,12 +64,35 @@ pub async fn get_prize_track_results(
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to fetch entries: {}", e)))?;
 
-    // Get all features for this hackathon
-    let features = feature::Entity::find()
-        .filter(feature::Column::HackathonId.eq(hackathon.id))
+    // Get feature weights for this prize (filter to non-zero weights)
+    let weights = prize_feature_weight::Entity::find()
+        .filter(prize_feature_weight::Column::PrizeId.eq(prize_id))
+        .filter(prize_feature_weight::Column::Weight.ne(0.0))
         .all(&ctx.state.db)
         .await
-        .map_err(|e| ServerFnError::new(format!("Failed to fetch features: {}", e)))?;
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch weights: {}", e)))?;
+
+    let weight_map: std::collections::HashMap<i32, f32> =
+        weights.iter().map(|w| (w.feature_id, w.weight)).collect();
+
+    // Only get features that have non-zero weights for this prize
+    let relevant_feature_ids: Vec<i32> = weight_map.keys().copied().collect();
+
+    let features = if relevant_feature_ids.is_empty() {
+        // No specific weights configured, show all features for this hackathon
+        feature::Entity::find()
+            .filter(feature::Column::HackathonId.eq(hackathon.id))
+            .all(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch features: {}", e)))?
+    } else {
+        // Only show features with configured weights
+        feature::Entity::find()
+            .filter(feature::Column::Id.is_in(relevant_feature_ids))
+            .all(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch features: {}", e)))?
+    };
 
     let feature_infos: Vec<FeatureInfo> = features
         .iter()
@@ -79,16 +102,6 @@ pub async fn get_prize_track_results(
             description: f.description.clone(),
         })
         .collect();
-
-    // Get feature weights for this prize
-    let weights = prize_feature_weight::Entity::find()
-        .filter(prize_feature_weight::Column::PrizeId.eq(prize_id))
-        .all(&ctx.state.db)
-        .await
-        .map_err(|e| ServerFnError::new(format!("Failed to fetch weights: {}", e)))?;
-
-    let weight_map: std::collections::HashMap<i32, f32> =
-        weights.iter().map(|w| (w.feature_id, w.weight)).collect();
 
     // Get all team IDs for this hackathon
     let team_ids: Vec<i32> = teams::Entity::find()
