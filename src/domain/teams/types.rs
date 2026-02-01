@@ -63,6 +63,8 @@ pub struct JoinRequestResponse {
     pub user_name: Option<String>,
     pub user_email: String,
     pub user_picture: Option<String>,
+    pub major: Option<String>,
+    pub graduation_year: Option<String>,
     pub message: Option<String>,
     pub created_at: String,
 }
@@ -93,6 +95,8 @@ pub struct InvitationResponse {
     pub user_name: Option<String>,
     pub user_email: String,
     pub user_picture: Option<String>,
+    pub major: Option<String>,
+    pub graduation_year: Option<String>,
     pub message: Option<String>,
     pub created_at: String,
 }
@@ -103,6 +107,12 @@ pub struct OutgoingJoinRequestResponse {
     pub id: i32,
     pub team_id: i32,
     pub team_name: String,
+    pub user_id: i32,
+    pub user_name: Option<String>,
+    pub user_email: String,
+    pub user_picture: Option<String>,
+    pub major: Option<String>,
+    pub graduation_year: Option<String>,
     pub message: Option<String>,
     pub created_at: String,
 }

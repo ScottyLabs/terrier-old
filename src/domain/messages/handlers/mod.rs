@@ -15,6 +15,8 @@ pub struct MessageResponse {
 	pub id: i32,
 	pub sender_user_id: i32,
 	pub message_group_id: i32,
+	pub recipient_type: Option<String>,
+	pub recipient_id: Option<i32>,
 	pub content: String,
 	pub created_at: chrono::NaiveDateTime,
 }
@@ -170,16 +172,30 @@ pub async fn get_messages(slug: String, user_id: i32) -> Result<Json<Vec<Message
 		.await
 		.map_err(|e| ServerFnError::new(format!("DB error: {}", e)))?;
 
-	let resp = msgs
-		.into_iter()
-		.map(|m| MessageResponse {
+	let mut resp: Vec<MessageResponse> = Vec::new();
+	for m in msgs.into_iter() {
+		// lookup message_group to get recipient info
+		let group = crate::domain::messages::message_groups::Entity::find_by_id(m.message_group_id)
+			.one(&ctx.state.db)
+			.await
+			.map_err(|e| ServerFnError::new(format!("DB error: {}", e)))?;
+
+		let (rtype, rid) = if let Some(g) = group {
+			(g.recipient_type.clone(), g.recipient_id)
+		} else {
+			(None, None)
+		};
+
+		resp.push(MessageResponse {
 			id: m.id,
 			sender_user_id: m.sender_user_id,
 			message_group_id: m.message_group_id,
+			recipient_type: rtype,
+			recipient_id: rid,
 			content: m.content,
 			created_at: m.created_at,
-		})
-		.collect();
+		});
+	}
 
 	Ok(Json(resp))
 }

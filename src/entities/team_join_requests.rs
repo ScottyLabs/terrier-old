@@ -14,6 +14,16 @@ pub struct Model {
     pub user_id: i32,
     #[sea_orm(column_type = "Text", nullable)]
     pub message: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub person_name: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub person_email: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub person_picture: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub person_major: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub person_graduation_year: Option<String>,
     pub created_at: DateTime,
 }
 

@@ -48,6 +48,7 @@ pub struct HackathonRole {
     pub hackathon_id: i32,
     pub role: String,
     pub slug: String,
+    pub team_id: Option<i32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -170,6 +171,7 @@ mod tests {
             hackathon_id: 1,
             role: "admin".to_string(),
             slug: "test".to_string(),
+            team_id: None,
         };
 
         let organizer_role = HackathonRole {
@@ -177,6 +179,7 @@ mod tests {
             hackathon_id: 1,
             role: "organizer".to_string(),
             slug: "test".to_string(),
+            team_id: None,
         };
 
         let judge_role = HackathonRole {
@@ -184,6 +187,7 @@ mod tests {
             hackathon_id: 1,
             role: "judge".to_string(),
             slug: "test".to_string(),
+            team_id: None,
         };
 
         // Judging Admin Page Permissions

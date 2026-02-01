@@ -79,6 +79,7 @@ async fn get_hackathon_role(slug: String) -> Result<Option<HackathonRole>, Serve
                 hackathon_id: hackathon.id,
                 role: "admin".to_string(),
                 slug,
+                team_id: None,
             }));
         }
     }
@@ -112,6 +113,7 @@ async fn get_hackathon_role(slug: String) -> Result<Option<HackathonRole>, Serve
             hackathon_id: role_record.hackathon_id,
             role: role_record.role,
             slug: hackathon.slug,
+            team_id: role_record.team_id,
         })),
         None => {
             // No role found, assign "applicant"
@@ -135,6 +137,7 @@ async fn get_hackathon_role(slug: String) -> Result<Option<HackathonRole>, Serve
                 hackathon_id: created_role.hackathon_id,
                 role: created_role.role,
                 slug: hackathon.slug,
+                team_id: created_role.team_id,
             }))
         }
     }

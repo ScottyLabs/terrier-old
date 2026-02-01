@@ -218,15 +218,13 @@ pub fn HackathonPeople(slug: String) -> Element {
                                             p { class: "text-base font-medium leading-6 text-foreground-neutral-primary truncate",
                                                 "{person.name.clone().unwrap_or_else(|| \"Unknown\".to_string())}"
                                             }
-                                            p { class: "text-sm text-foreground-neutral-secondary truncate",
-                                                "{person.email}"
-                                            }
+                                            p { class: "text-sm text-foreground-neutral-secondary truncate", "{person.email}" }
                                         }
 
                                         // Right side: Role selector and View button
                                         div { class: "flex items-center gap-3 flex-shrink-0",
                                             // Role dropdown (only for admins)
-                                            if is_admin {
+                                            if is_admin { // Role dropdown (only for admins)
                                                 {
                                                     let person_id = person.user_id;
                                                     let current_role = person.role.clone();
@@ -243,18 +241,16 @@ pub fn HackathonPeople(slug: String) -> Element {
                                                                 let slug = slug.clone();
                                                                 spawn(async move {
                                                                     updating_role.set(Some(person_id));
-                                                                    let request = UpdateRoleRequest { role: new_role };
+                                                                    let request = UpdateRoleRequest {
+                                                                        role: new_role,
+                                                                    };
                                                                     let _ = update_person_role(slug, person_id, request).await;
                                                                     people_resource.restart();
                                                                     updating_role.set(None);
                                                                 });
                                                             },
-                                                            for (value, label) in AVAILABLE_ROLES.iter() {
-                                                                option {
-                                                                    value: *value,
-                                                                    selected: current_role.to_lowercase() == *value,
-                                                                    "{label}"
-                                                                }
+                                                            for (value , label) in AVAILABLE_ROLES.iter() {
+                                                                option { value: *value, selected: current_role.to_lowercase() == *value, "{label}" }
                                                             }
                                                         }
                                                     }
@@ -304,8 +300,8 @@ pub fn HackathonPeople(slug: String) -> Element {
                     role: format_role(&person.role),
                     display_name: person.name.clone(),
                     portfolio: None, // TODO: Add to HackathonPerson struct
-                    major: None, // TODO: Add to HackathonPerson struct
-                    graduation_year: None, // TODO: Add to HackathonPerson struct
+                    major: person.major.clone(),
+                    graduation_year: person.graduation_year.clone(),
                     dietary_restrictions: None, // TODO: Add to HackathonPerson struct
                     shirt_size: None, // TODO: Add to HackathonPerson struct
                     is_admin,

@@ -25,6 +25,8 @@ pub struct MessageResponse {
     pub id: i32,
     pub sender_user_id: i32,
     pub message_group_id: i32,
+    pub recipient_type: Option<String>,
+    pub recipient_id: Option<i32>,
     pub content: String,
     pub created_at: chrono::NaiveDateTime,
 }
@@ -196,14 +198,70 @@ pub async fn get_messages(
         .await
         .map_err(|e| ServerFnError::new(format!("DB error: {}", e)))?;
 
-    let resp = msgs
-        .into_iter()
-        .map(|m| MessageResponse {
+    let mut resp: Vec<MessageResponse> = Vec::new();
+    for m in msgs.into_iter() {
+        let group = crate::domain::messages::message_groups::Entity::find_by_id(m.message_group_id)
+            .one(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("DB error: {}", e)))?;
+
+        let (rtype, rid) = if let Some(g) = group {
+            (Some(g.recipient_type.clone()), g.recipient_id)
+        } else {
+            (None, None)
+        };
+
+        resp.push(MessageResponse {
             id: m.id,
             sender_user_id: m.sender_user_id,
             message_group_id: m.message_group_id,
+            recipient_type: rtype,
+            recipient_id: rid,
             content: m.content,
             created_at: m.created_at,
+        });
+    }
+
+    Ok(resp)
+}
+
+#[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "server", derive(ToSchema))]
+pub struct MessageGroupInfo {
+    pub id: i32,
+    pub flag: String,
+    pub recipient_id: Option<i32>,
+    pub recipient_type: String,
+}
+
+/// List message groups (admins/organizers only)
+#[cfg_attr(feature = "server", utoipa::path(
+    get,
+    path = "/api/hackathons/{slug}/message_groups",
+    params(("slug" = String, Path, description = "Hackathon slug")),
+    responses((status = 200, description = "Message groups", body = Vec<MessageGroupInfo>)),
+    tag = "messages"
+))]
+#[get("/api/hackathons/:slug/message_groups", user: SyncedUser)]
+pub async fn get_message_groups(slug: String) -> Result<Vec<MessageGroupInfo>, ServerFnError> {
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
+    Permissions::require_admin_or_organizer(&ctx).await?;
+
+    let groups = crate::domain::messages::message_groups::Entity::find()
+        .all(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("DB error: {}", e)))?;
+
+    let resp = groups
+        .into_iter()
+        .map(|g| MessageGroupInfo {
+            id: g.id,
+            flag: g.flag,
+            recipient_id: g.recipient_id,
+            recipient_type: g.recipient_type,
         })
         .collect();
 

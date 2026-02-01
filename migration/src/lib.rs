@@ -25,6 +25,7 @@ mod m20260131_120000_create_messages_and_groups;
 mod m20260131_125000_add_messages_content;
 mod m20260131_add_judge_prize_track;
 mod m20260131_add_judge_walk_type;
+mod m20260201_add_person_snapshot_to_team_requests_and_invitations;
 
 pub struct Migrator;
 
@@ -57,6 +58,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260131_add_judge_walk_type::Migration),
             Box::new(m20260131_120000_create_messages_and_groups::Migration),
             Box::new(m20260131_125000_add_messages_content::Migration),
+            Box::new(m20260201_add_person_snapshot_to_team_requests_and_invitations::Migration),
         ]
     }
 }

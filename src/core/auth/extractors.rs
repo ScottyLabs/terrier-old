@@ -55,6 +55,7 @@ impl FromRequestParts<AppState> for HackathonRole {
                 hackathon_id: hackathon.id,
                 role: "admin".to_string(),
                 slug,
+                team_id: None,
             });
         }
 
@@ -81,6 +82,7 @@ impl FromRequestParts<AppState> for HackathonRole {
             hackathon_id: result.0.hackathon_id,
             role: result.0.role,
             slug,
+            team_id: result.0.team_id,
         })
     }
 }
