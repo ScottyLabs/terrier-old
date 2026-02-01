@@ -5,34 +5,13 @@ pub struct Migration;
 
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(Messages::Table)
-                    .add_column(
-                        ColumnDef::new(Messages::Content)
-                            .text()
-                            .not_null()
-                            .default(Expr::value("".to_string())),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
+    async fn up(&self, _manager: &SchemaManager) -> Result<(), DbErr> {
+        // No-op migration: the `content` column already exists in some databases.
         Ok(())
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(Messages::Table)
-                    .drop_column(Messages::Content)
-                    .to_owned(),
-            )
-            .await?;
-
+    async fn down(&self, _manager: &SchemaManager) -> Result<(), DbErr> {
+        // No-op
         Ok(())
     }
 }
