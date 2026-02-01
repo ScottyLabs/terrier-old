@@ -840,6 +840,54 @@ pub async fn submit_comparisons(
                 .insert(&txn)
                 .await
                 .map_err(|e| ServerFnError::new(format!("Failed to save comparison: {}", e)))?;
+
+            // Add transitive comparisons: if the winner beat the loser, the winner
+            // also beats all projects that the loser previously beat.
+            // This helps projects seen later in the walk accumulate more comparison data.
+            let loser_id = if comparison.winner_submission_id == current_submission_id {
+                prev_best_id
+            } else {
+                current_submission_id
+            };
+            let winner_id = comparison.winner_submission_id;
+
+            // Find all comparisons where the loser won (same feature, same judge)
+            let loser_wins = pairwise_comparison::Entity::find()
+                .filter(pairwise_comparison::Column::FeatureId.eq(comparison.feature_id))
+                .filter(pairwise_comparison::Column::JudgeId.eq(ctx.user.id))
+                .filter(pairwise_comparison::Column::WinnerId.eq(Some(loser_id)))
+                .all(&txn)
+                .await
+                .map_err(|e| ServerFnError::new(format!("Failed to fetch loser's wins: {}", e)))?;
+
+            // For each project the loser beat, record that the winner also beats it
+            for prev_comp in loser_wins {
+                // Determine which submission the loser beat
+                let beaten_id = if prev_comp.submission_a_id == loser_id {
+                    prev_comp.submission_b_id
+                } else {
+                    prev_comp.submission_a_id
+                };
+
+                // Don't add duplicate or self-comparisons
+                if beaten_id == winner_id {
+                    continue;
+                }
+
+                let transitive_comparison = pairwise_comparison::ActiveModel {
+                    id: NotSet,
+                    feature_id: Set(comparison.feature_id),
+                    judge_id: Set(ctx.user.id),
+                    submission_a_id: Set(winner_id),
+                    submission_b_id: Set(beaten_id),
+                    winner_id: Set(Some(winner_id)),
+                    created_at: Set(now),
+                };
+
+                transitive_comparison.insert(&txn).await.map_err(|e| {
+                    ServerFnError::new(format!("Failed to save transitive comparison: {}", e))
+                })?;
+            }
         }
 
         // Update the assignment with the new best and notes

@@ -169,7 +169,7 @@ pub async fn create_prize(
 ) -> Result<PrizeInfo, ServerFnError> {
     use crate::domain::people::repository::UserRoleRepository;
     use crate::entities::prize;
-    use sea_orm::{ActiveModelTrait, Set};
+    use sea_orm::{ActiveModelTrait, Set, TransactionTrait};
 
     let ctx = RequestContext::extract(&user)
         .await?
@@ -194,6 +194,14 @@ pub async fn create_prize(
         ));
     }
 
+    // Start transaction
+    let txn = ctx
+        .state
+        .db
+        .begin()
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to start transaction: {}", e)))?;
+
     // Create the prize with hackathon_id
     let prize_model = prize::ActiveModel {
         name: Set(request.name.clone()),
@@ -206,7 +214,7 @@ pub async fn create_prize(
     };
 
     let inserted = prize_model
-        .insert(&ctx.state.db)
+        .insert(&txn)
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to create prize: {}", e)))?;
 
@@ -217,10 +225,14 @@ pub async fn create_prize(
             prize_id: Set(inserted.id),
             event_id: Set(*event_id),
         };
-        req.insert(&ctx.state.db)
+        req.insert(&txn)
             .await
             .map_err(|e| ServerFnError::new(format!("Failed to add required event: {}", e)))?;
     }
+
+    txn.commit()
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to commit transaction: {}", e)))?;
 
     Ok(PrizeInfo {
         id: inserted.id,

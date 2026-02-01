@@ -7,6 +7,12 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn HackathonMockExpo(slug: String) -> Element {
+    if let Some(no_access) =
+        crate::auth::hooks::use_require_access_or_redirect(crate::auth::PRIZE_TRACKS_ROLES)
+    {
+        return no_access;
+    }
+
     let mut message = use_signal(|| None::<String>);
     let mut loading = use_signal(|| false);
 

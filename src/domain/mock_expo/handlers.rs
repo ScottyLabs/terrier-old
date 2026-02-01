@@ -34,6 +34,8 @@ pub async fn generate_fake_data(
         .with_hackathon(&slug)
         .await?;
 
+    crate::core::auth::permissions::Permissions::require_admin_or_organizer(&ctx).await?;
+
     let hackathon = ctx.hackathon()?;
     let db = &ctx.state.db;
 
@@ -144,6 +146,8 @@ pub async fn clear_fake_data(slug: String) -> Result<GenerationResult, ServerFnE
         .with_hackathon(&slug)
         .await?;
 
+    crate::core::auth::permissions::Permissions::require_admin_or_organizer(&ctx).await?;
+
     let hackathon = ctx.hackathon()?;
 
     // Find all fake teams in this hackathon
@@ -205,6 +209,8 @@ pub async fn assign_tables(slug: String) -> Result<GenerationResult, ServerFnErr
         .with_hackathon(&slug)
         .await?;
 
+    crate::core::auth::permissions::Permissions::require_admin_or_organizer(&ctx).await?;
+
     let hackathon = ctx.hackathon()?;
 
     let submissions: Vec<(submission::Model, Option<teams::Model>)> = submission::Entity::find()
@@ -254,6 +260,8 @@ pub async fn assign_prizes_randomly(slug: String) -> Result<GenerationResult, Se
         .await?
         .with_hackathon(&slug)
         .await?;
+
+    crate::core::auth::permissions::Permissions::require_admin_or_organizer(&ctx).await?;
 
     let hackathon = ctx.hackathon()?;
 
@@ -339,6 +347,8 @@ pub async fn assign_random_scores(slug: String) -> Result<GenerationResult, Serv
         .await?
         .with_hackathon(&slug)
         .await?;
+
+    crate::core::auth::permissions::Permissions::require_admin_or_organizer(&ctx).await?;
 
     let hackathon = ctx.hackathon()?;
 

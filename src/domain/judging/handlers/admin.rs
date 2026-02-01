@@ -43,7 +43,12 @@ pub async fn get_prize_track_results(
     let hackathon = ctx.hackathon()?;
 
     // Get the prize
-    let prize_model = prize::Entity::find_by_id(prize_id)
+    let prize_model = prize::Entity::find()
+        .filter(
+            prize::Column::Id
+                .eq(prize_id)
+                .and(prize::Column::HackathonId.eq(hackathon.id)),
+        )
         .one(&ctx.state.db)
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to fetch prize: {}", e)))?
@@ -549,8 +554,10 @@ pub async fn assign_prize_judges(
     prize_id: i32,
     request: AssignJudgesRequest,
 ) -> Result<(), ServerFnError> {
-    use crate::entities::judge_prize_track;
-    use sea_orm::{ActiveModelTrait, ActiveValue::NotSet, Set};
+    use crate::entities::{judge_prize_track, prize};
+    use sea_orm::{
+        ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, QueryFilter, Set,
+    };
 
     let ctx = RequestContext::extract(&user)
         .await?
@@ -558,6 +565,19 @@ pub async fn assign_prize_judges(
         .await?;
 
     Permissions::require_admin_or_organizer(&ctx).await?;
+    let hackathon = ctx.hackathon()?;
+
+    // Verify prize belongs to this hackathon
+    let _ = prize::Entity::find()
+        .filter(
+            prize::Column::Id
+                .eq(prize_id)
+                .and(prize::Column::HackathonId.eq(hackathon.id)),
+        )
+        .one(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch prize: {}", e)))?
+        .ok_or_else(|| ServerFnError::new("Prize not found"))?;
 
     for judge_id in request.judge_ids {
         let new_assignment = judge_prize_track::ActiveModel {
@@ -597,7 +617,7 @@ pub async fn unassign_prize_judge(
     prize_id: i32,
     judge_id: i32,
 ) -> Result<(), ServerFnError> {
-    use crate::entities::judge_prize_track;
+    use crate::entities::{judge_prize_track, prize};
     use sea_orm::{ColumnTrait, EntityTrait, ModelTrait, QueryFilter};
 
     let ctx = RequestContext::extract(&user)
@@ -606,6 +626,19 @@ pub async fn unassign_prize_judge(
         .await?;
 
     Permissions::require_admin_or_organizer(&ctx).await?;
+    let hackathon = ctx.hackathon()?;
+
+    // Verify prize belongs to this hackathon
+    let _ = prize::Entity::find()
+        .filter(
+            prize::Column::Id
+                .eq(prize_id)
+                .and(prize::Column::HackathonId.eq(hackathon.id)),
+        )
+        .one(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch prize: {}", e)))?
+        .ok_or_else(|| ServerFnError::new("Prize not found"))?;
 
     let assignment = judge_prize_track::Entity::find()
         .filter(judge_prize_track::Column::PrizeId.eq(prize_id))
@@ -642,8 +675,10 @@ pub async fn unassign_prize_judge(
 #[post("/api/hackathons/:slug/judging/prizes/:prize_id/judges/all", user: SyncedUser)]
 pub async fn assign_all_judges(slug: String, prize_id: i32) -> Result<(), ServerFnError> {
     use crate::domain::people::handlers::query::get_hackathon_people;
-    use crate::entities::{judge_prize_track, users};
-    use sea_orm::{ActiveModelTrait, ActiveValue::NotSet, Set};
+    use crate::entities::{judge_prize_track, prize, users};
+    use sea_orm::{
+        ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, QueryFilter, Set,
+    };
 
     let ctx = RequestContext::extract(&user)
         .await?
@@ -651,6 +686,19 @@ pub async fn assign_all_judges(slug: String, prize_id: i32) -> Result<(), Server
         .await?;
 
     Permissions::require_admin_or_organizer(&ctx).await?;
+    let hackathon = ctx.hackathon()?;
+
+    // Verify prize belongs to this hackathon
+    let _ = prize::Entity::find()
+        .filter(
+            prize::Column::Id
+                .eq(prize_id)
+                .and(prize::Column::HackathonId.eq(hackathon.id)),
+        )
+        .one(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch prize: {}", e)))?
+        .ok_or_else(|| ServerFnError::new("Prize not found"))?;
 
     // Get all people in the hackathon
     let people = get_hackathon_people(slug).await?;

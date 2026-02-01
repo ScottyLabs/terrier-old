@@ -290,7 +290,7 @@ pub fn HackathonPrizeTracks(slug: String) -> Element {
                                                             checked: "{is_selected}",
                                                             onchange: move |e| {
                                                                 let mut current = required_event_ids();
-                                                                if e.value() == "true" {
+                                                                if e.checked() {
                                                                     current.push(event_id);
                                                                 } else {
                                                                     current.retain(|&id| id != event_id);
@@ -426,7 +426,7 @@ pub fn HackathonPrizeTracks(slug: String) -> Element {
                                                                 checked: "{is_selected}",
                                                                 onchange: move |e| {
                                                                     let mut current = editing_required_events();
-                                                                    if e.value() == "true" {
+                                                                    if e.checked() {
                                                                         current.push(event_id);
                                                                     } else {
                                                                         current.retain(|&id| id != event_id);
