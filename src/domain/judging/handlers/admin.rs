@@ -337,12 +337,16 @@ pub async fn generate_ai_summary(
         .map_err(|e| ServerFnError::new(format!("Failed to fetch submission: {}", e)))?
         .ok_or_else(|| ServerFnError::new("Submission not found"))?;
 
-    // Get team name
+    // Get team and verify hackathon
     let team = teams::Entity::find_by_id(sub.team_id)
         .one(&ctx.state.db)
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to fetch team: {}", e)))?
         .ok_or_else(|| ServerFnError::new("Team not found"))?;
+
+    if team.hackathon_id != hackathon.id {
+        return Err(ServerFnError::new("Submission not found in this hackathon"));
+    }
 
     // Get project description
     let description = sub
@@ -411,7 +415,10 @@ pub async fn generate_ai_summary(
     );
 
     // Call OpenRouter API
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| ServerFnError::new(format!("Failed to build HTTP client: {}", e)))?;
     let response = client
         .post("https://openrouter.ai/api/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))

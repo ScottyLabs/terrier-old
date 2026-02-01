@@ -220,7 +220,23 @@ pub async fn create_prize(
 
     // Insert required events
     for event_id in request.required_event_ids.iter() {
-        use crate::entities::prize_required_events;
+        use crate::entities::{events, prize_required_events};
+        use sea_orm::EntityTrait;
+
+        // Verify event belongs to this hackathon
+        let event = events::Entity::find_by_id(*event_id)
+            .one(&txn)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch event: {}", e)))?
+            .ok_or_else(|| ServerFnError::new(format!("Event {} not found", event_id)))?;
+
+        if event.hackathon_id != hackathon.id {
+            return Err(ServerFnError::new(format!(
+                "Event {} does not belong to this hackathon",
+                event_id
+            )));
+        }
+
         let req = prize_required_events::ActiveModel {
             prize_id: Set(inserted.id),
             event_id: Set(*event_id),
@@ -342,6 +358,26 @@ pub async fn update_prize(
     // Update required events if provided
     let mut required_event_ids = Vec::new();
     if let Some(req_ids) = request.required_event_ids {
+        use crate::entities::events;
+        use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
+
+        // Validate that all event IDs belong to this hackathon
+        if !req_ids.is_empty() {
+            let count = events::Entity::find()
+                .filter(events::Column::Id.is_in(req_ids.clone()))
+                .filter(events::Column::HackathonId.eq(hackathon.id))
+                .count(&txn)
+                .await
+                .map_err(|e| ServerFnError::new(format!("Failed to validate events: {}", e)))?;
+
+            let unique_ids: std::collections::HashSet<_> = req_ids.iter().collect();
+            if count as usize != unique_ids.len() {
+                return Err(ServerFnError::new(
+                    "One or more event IDs are invalid or belong to another hackathon",
+                ));
+            }
+        }
+
         // Delete existing requirements
         prize_required_events::Entity::delete_many()
             .filter(prize_required_events::Column::PrizeId.eq(id))
@@ -488,8 +524,8 @@ pub async fn update_prize_feature_weights(
     use crate::domain::people::repository::UserRoleRepository;
     use crate::entities::prize_feature_weight;
     use sea_orm::{
-        ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, QueryFilter, Set,
-        TransactionTrait,
+        ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, PaginatorTrait,
+        QueryFilter, Set, TransactionTrait,
     };
 
     let ctx = RequestContext::extract(&user)
@@ -532,13 +568,33 @@ pub async fn update_prize_feature_weights(
         .map_err(|e| ServerFnError::new(format!("Failed to start transaction: {}", e)))?;
 
     // Verify prize exists and belongs to this hackathon
-    use crate::entities::prize;
-    let prize = prize::Entity::find_by_id(id)
+    use crate::entities::{feature, prize};
+    let _prize = prize::Entity::find_by_id(id)
         .filter(prize::Column::HackathonId.eq(hackathon.id))
-        .one(&ctx.state.db)
+        .one(&txn)
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to find prize: {}", e)))?
         .ok_or_else(|| ServerFnError::new("Prize not found in this hackathon"))?;
+
+    // Validate that all feature IDs belong to this hackathon
+    let feature_ids: Vec<i32> = request.weights.iter().map(|w| w.feature_id).collect();
+    if !feature_ids.is_empty() {
+        let count = feature::Entity::find()
+            .filter(feature::Column::Id.is_in(feature_ids.clone()))
+            .filter(feature::Column::HackathonId.eq(hackathon.id))
+            .count(&txn)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to validate features: {}", e)))?;
+
+        // Check if all requested features were found in this hackathon
+        // Note: this assumes IDs in request are unique; if not, we should check against unique count
+        let unique_ids: std::collections::HashSet<_> = feature_ids.iter().collect();
+        if count as usize != unique_ids.len() {
+            return Err(ServerFnError::new(
+                "One or more feature IDs are invalid or belong to another hackathon",
+            ));
+        }
+    }
 
     // Delete existing weights
     prize_feature_weight::Entity::delete_many()

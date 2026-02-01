@@ -184,6 +184,11 @@ pub async fn submit_project(
         }
     }
 
+    // Validate table number if provided
+    if let Some(table_number) = &request.table_number {
+        validate_table_number(table_number)?;
+    }
+
     // Check if submission already exists
     let existing = submission::Entity::find()
         .filter(submission::Column::TeamId.eq(team_id))
@@ -297,25 +302,7 @@ pub async fn set_table_number(slug: String, table_number: String) -> Result<(), 
         .ok_or_else(|| ServerFnError::new("No submission found. Submit a project first."))?;
 
     // Validate table number
-    // Allow alphanumeric (e.g. "A12", "B4"), but if it's purely numeric, ensure it's positive
-    if table_number.chars().all(|c| c.is_numeric()) {
-        let parsed: i32 = table_number
-            .parse()
-            .map_err(|_| ServerFnError::new("Table number must be a valid integer"))?;
-        if parsed <= 0 {
-            return Err(ServerFnError::new(
-                "Table number must be a positive integer",
-            ));
-        }
-    } else if !table_number
-        .chars()
-        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
-    {
-        // Basic sanity check for alphanumeric format
-        return Err(ServerFnError::new(
-            "Table number must contain only letters, numbers, hyphens, or underscores",
-        ));
-    }
+    validate_table_number(&table_number)?;
 
     // Update table number
     let mut active: submission::ActiveModel = sub.into();
@@ -437,5 +424,33 @@ pub async fn update_prize_tracks(
             .map_err(|e| ServerFnError::new(format!("Failed to add prize track: {}", e)))?;
     }
 
+    Ok(())
+}
+
+/// Helper to validate table number format
+fn validate_table_number(table_number: &str) -> Result<(), ServerFnError> {
+    if table_number.is_empty() {
+        return Err(ServerFnError::new("Table number cannot be empty"));
+    }
+
+    // Allow alphanumeric (e.g. "A12", "B4"), but if it's purely numeric, ensure it's positive
+    if table_number.chars().all(|c| c.is_numeric()) {
+        let parsed: i32 = table_number
+            .parse()
+            .map_err(|_| ServerFnError::new("Table number must be a valid integer"))?;
+        if parsed <= 0 {
+            return Err(ServerFnError::new(
+                "Table number must be a positive integer",
+            ));
+        }
+    } else if !table_number
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        // Basic sanity check for alphanumeric format
+        return Err(ServerFnError::new(
+            "Table number must contain only letters, numbers, hyphens, or underscores",
+        ));
+    }
     Ok(())
 }

@@ -288,6 +288,12 @@ impl MigrationTrait for Migration {
                             .to(Submission::Table, Submission::Id)
                             .on_delete(ForeignKeyAction::Cascade),
                     )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .from(PairwiseComparison::Table, PairwiseComparison::WinnerId)
+                            .to(Submission::Table, Submission::Id)
+                            .on_delete(ForeignKeyAction::SetNull),
+                    )
                     .to_owned(),
             )
             .await?;

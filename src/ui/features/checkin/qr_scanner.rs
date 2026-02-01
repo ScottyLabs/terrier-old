@@ -162,8 +162,12 @@ pub fn QRScannerModal(
                         }
                     }
                     Err(e) => {
-                        dioxus_logger::tracing::error!("Recv error: {:?}", e);
-                        // Don't break on recv errors, keep trying
+                        dioxus_logger::tracing::error!("Scanner communication error: {:?}", e);
+                        error_message.set(Some(
+                            "Lost connection to camera scanner. Please try again.".to_string(),
+                        ));
+                        is_scanning.set(false);
+                        break;
                     }
                 }
             }

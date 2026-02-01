@@ -337,6 +337,7 @@ fn ProjectDetailModal(
                             a {
                                 href: "{project.repo_url.clone().unwrap_or_default()}",
                                 target: "_blank",
+                                rel: "noopener noreferrer",
                                 class: "text-sm text-foreground-brand-primary hover:underline",
                                 {project.repo_url.clone().unwrap_or_default()}
                             }
@@ -354,6 +355,7 @@ fn ProjectDetailModal(
                             a {
                                 href: "{project.presentation_url.clone().unwrap_or_default()}",
                                 target: "_blank",
+                                rel: "noopener noreferrer",
                                 class: "text-sm text-foreground-brand-primary hover:underline",
                                 {project.presentation_url.clone().unwrap_or_default()}
                             }
@@ -371,6 +373,7 @@ fn ProjectDetailModal(
                             a {
                                 href: "{project.video_url.clone().unwrap_or_default()}",
                                 target: "_blank",
+                                rel: "noopener noreferrer",
                                 class: "text-sm text-foreground-brand-primary hover:underline",
                                 {project.video_url.clone().unwrap_or_default()}
                             }
