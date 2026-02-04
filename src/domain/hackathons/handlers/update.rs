@@ -11,6 +11,10 @@ pub struct UpdateHackathonRequest {
     pub max_team_size: i32,
     pub start_date: NaiveDateTime,
     pub end_date: NaiveDateTime,
+    // Optional judging config fields
+    pub proximity_routing_enabled: Option<bool>,
+    pub room_width: Option<i32>,
+    pub judging_timer_seconds: Option<i32>,
 }
 
 #[cfg(feature = "server")]
@@ -60,6 +64,17 @@ pub async fn update_hackathon(
     hackathon.start_date = Set(req.start_date);
     hackathon.end_date = Set(req.end_date);
 
+    // Update optional judging config fields
+    if let Some(proximity_enabled) = req.proximity_routing_enabled {
+        hackathon.proximity_routing_enabled = Set(proximity_enabled);
+    }
+    if let Some(width) = req.room_width {
+        hackathon.room_width = Set(width);
+    }
+    if let Some(timer) = req.judging_timer_seconds {
+        hackathon.judging_timer_seconds = Set(timer);
+    }
+
     let hackathon = hackathon
         .update(&ctx.state.db)
         .await
@@ -85,6 +100,9 @@ pub async fn update_hackathon(
         submissions_closed: hackathon.submissions_closed,
         judging_started: hackathon.judging_started,
         judge_session_timeout_minutes: hackathon.judge_session_timeout_minutes,
+        proximity_routing_enabled: hackathon.proximity_routing_enabled,
+        room_width: hackathon.room_width,
+        judging_timer_seconds: hackathon.judging_timer_seconds,
     })
 }
 

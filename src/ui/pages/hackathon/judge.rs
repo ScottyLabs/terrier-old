@@ -6,16 +6,17 @@ use crate::{
         hackathons::types::HackathonInfo,
         judging::{
             handlers::{
-                complete_visit, get_unified_state, request_next_project, set_walk_type,
-                submit_comparisons, toggle_prize_assignment,
+                complete_visit, generate_judging_questions, get_unified_state,
+                request_next_project, set_walk_type, submit_comparisons, toggle_prize_assignment,
             },
             types::{
-                CompleteVisitRequest, CurrentProject, FeatureComparison, JudgeFeatureState,
-                PrizeInfo, SubmitComparisonsRequest, UnifiedJudgingState, WalkType,
+                AiQuestionsResponse, CompleteVisitRequest, CurrentProject, FeatureComparison,
+                JudgeFeatureState, PrizeInfo, SubmitComparisonsRequest, UnifiedJudgingState,
+                WalkType,
             },
         },
     },
-    ui::foundation::components::{Button, ButtonVariant},
+    ui::foundation::components::Button,
 };
 
 const PRIZE_COLORS: &[&str] = &[
@@ -363,6 +364,8 @@ pub fn HackathonJudge(slug: String) -> Element {
                         loading: *loading.read(),
                         on_submit: submit_all,
                         on_skip: skip_project,
+                        timer_seconds: hackathon_info.judging_timer_seconds,
+                        slug: slug.clone(),
                     }
                 }
             } else {
@@ -601,6 +604,8 @@ fn InProgressView(
     loading: bool,
     on_submit: EventHandler<()>,
     on_skip: EventHandler<()>,
+    timer_seconds: i32,
+    slug: String,
 ) -> Element {
     let project_name = project
         .project_name
@@ -616,6 +621,62 @@ fn InProgressView(
     let mut show_json = use_signal(|| false);
     let mut viewed_project: Signal<Option<JudgeFeatureState>> = use_signal(|| None);
 
+    // Countdown timer state - calculate remaining time based on visit start_time
+    // Use visit_id to detect project changes and reset timer
+    let timer_enabled = timer_seconds > 0;
+    let visit_id = project.visit_id;
+    let start_time = project.start_time;
+
+    // Calculate initial remaining time based on visit start
+    let calc_remaining = move || {
+        if !timer_enabled {
+            return 0;
+        }
+        let now = chrono::Utc::now().naive_utc();
+        let elapsed_seconds = (now - start_time).num_seconds();
+        let remaining = (timer_seconds as i64) - elapsed_seconds;
+        remaining.max(0) as i32
+    };
+
+    // Use use_memo keyed on visit_id to reset when project changes
+    let mut remaining_seconds = use_signal(calc_remaining);
+    let mut timer_running = use_signal(|| false);
+
+    // Reset timer when visit_id changes
+    use_effect(move || {
+        remaining_seconds.set(calc_remaining());
+        timer_running.set(false);
+    });
+
+    // AI questions state
+    let mut ai_questions: Signal<Option<Vec<String>>> = use_signal(|| None);
+    let mut ai_loading = use_signal(|| false);
+    let submission_id = project.submission_id;
+    let slug_for_ai = slug.clone();
+
+    // Timer countdown effect - only spawn one loop
+    use_effect(move || {
+        if !timer_enabled || *timer_running.read() || remaining_seconds() <= 0 {
+            return;
+        }
+
+        timer_running.set(true);
+
+        // Set up interval for countdown
+        spawn(async move {
+            loop {
+                gloo_timers::future::TimeoutFuture::new(1000).await;
+                let current = remaining_seconds();
+                if current <= 1 {
+                    remaining_seconds.set(0);
+                    break;
+                }
+                remaining_seconds.set(current - 1);
+            }
+            timer_running.set(false);
+        });
+    });
+
     if let Some(feature) = viewed_project.read().clone() {
         return rsx! {
             ProjectInfoModal { feature, on_close: move |_| viewed_project.set(None) }
@@ -624,8 +685,29 @@ fn InProgressView(
 
     rsx! {
         div {
-            h1 { class: "text-2xl font-semibold text-foreground-neutral-primary mb-6",
-                "Judging Projects Now"
+            div { class: "flex flex-wrap justify-between items-center gap-4 mb-6",
+                h1 { class: "text-2xl font-semibold text-foreground-neutral-primary",
+                    "Judging Projects Now"
+                }
+
+                // Timer display
+                if timer_enabled {
+                    {
+                        let mins = remaining_seconds() / 60;
+                        let secs = remaining_seconds() % 60;
+                        let time_str = format!("{:02}:{:02}", mins, secs);
+                        let timer_class = if remaining_seconds() <= 60 {
+                            "px-4 py-2 rounded-lg font-mono text-lg font-semibold bg-red-100 text-red-700"
+                        } else if remaining_seconds() <= 180 {
+                            "px-4 py-2 rounded-lg font-mono text-lg font-semibold bg-amber-100 text-amber-700"
+                        } else {
+                            "px-4 py-2 rounded-lg font-mono text-lg font-semibold bg-green-100 text-green-700"
+                        };
+                        rsx! {
+                            div { class: "{timer_class}", "⏱ {time_str}" }
+                        }
+                    }
+                }
             }
 
             // Project header
@@ -672,6 +754,59 @@ fn InProgressView(
                         div { class: "mb-4 p-4 bg-background-neutral-secondary-enabled rounded-lg overflow-x-auto",
                             pre { class: "text-xs text-foreground-neutral-primary font-mono",
                                 "{serde_json::to_string_pretty(&project.submission_data).unwrap_or_default()}"
+                            }
+                        }
+                    }
+
+                    // AI Questions Section
+                    div { class: "mt-4 pt-4 border-t border-border-neutral-primary",
+                        div { class: "flex items-center gap-3 mb-3",
+                            button {
+                                class: "px-4 py-2 text-sm font-medium rounded-lg bg-background-brand-secondary text-foreground-brand-primary hover:bg-background-brand-secondary-hover disabled:opacity-50",
+                                disabled: *ai_loading.read(),
+                                onclick: move |_| {
+                                    let slug = slug_for_ai.clone();
+                                    spawn(async move {
+                                        ai_loading.set(true);
+                                        match generate_judging_questions(slug, submission_id).await {
+                                            Ok(response) => {
+                                                ai_questions.set(Some(response.questions));
+                                            }
+                                            Err(e) => {
+                                                // Show default questions on error
+                                                ai_questions.set(Some(vec![format!("AI unavailable: {}", e)]));
+                                            }
+                                        }
+                                        ai_loading.set(false);
+                                    });
+                                },
+                                if *ai_loading.read() {
+                                    "✨ Generating..."
+                                } else {
+                                    "✨ Ask AI for Questions"
+                                }
+                            }
+                            if ai_questions.read().is_some() {
+                                button {
+                                    class: "text-xs text-foreground-neutral-secondary hover:text-foreground-neutral-primary",
+                                    onclick: move |_| ai_questions.set(None),
+                                    "Clear"
+                                }
+                            }
+                        }
+
+                        if let Some(questions) = ai_questions.read().as_ref() {
+                            div { class: "p-4 bg-purple-50 rounded-lg",
+                                h4 { class: "text-sm font-medium text-purple-900 mb-2",
+                                    "Suggested Questions:"
+                                }
+                                ul { class: "space-y-2",
+                                    for question in questions.iter() {
+                                        li { class: "text-sm text-purple-800 pl-4 relative before:content-['•'] before:absolute before:left-0 before:text-purple-400",
+                                            "{question}"
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

@@ -60,6 +60,8 @@ pub struct Config {
     pub oidc_client_secret: String,
     pub admin_emails: Vec<String>,
     pub openrouter_api_key: Option<String>,
+    pub posthog_key: Option<String>,
+    pub posthog_host: Option<String>,
 }
 
 #[cfg(feature = "server")]
@@ -96,6 +98,8 @@ impl Config {
             oidc_client_secret: dotenvy::var("OIDC_CLIENT_SECRET")?,
             admin_emails,
             openrouter_api_key: dotenvy::var("OPENROUTER_API_KEY").ok(),
+            posthog_key: dotenvy::var("POSTHOG_KEY").ok(),
+            posthog_host: dotenvy::var("POSTHOG_HOST").ok(),
         })
     }
 }

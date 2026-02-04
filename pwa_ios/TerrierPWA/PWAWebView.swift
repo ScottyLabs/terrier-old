@@ -16,9 +16,9 @@ struct PWAConfig {
     static let authProviderHosts = [
         "login.cmu.edu",          // CMU Shibboleth
         "idp.cmu.edu",            // CMU Identity Provider
-        "accounts.google.com",    // Google OAuth
-        "google.com",             // Google domains
-        "googleapis.com",         // Google APIs
+        // "accounts.google.com",    // Google OAuth (Moved to external browser auth)
+        // "google.com",             // Google domains (Moved to external browser auth)
+        // "googleapis.com",         // Google APIs (Moved to external browser auth)
         "auth0.com",              // Auth0
         "okta.com",               // Okta
         "microsoftonline.com",    // Microsoft/Azure AD
@@ -33,9 +33,10 @@ struct PWAConfig {
     // external browser auth won't work. Keep this list empty for now.
     // Once Universal Links are working, add providers that block WebView here.
     static let externalBrowserAuthHosts: [String] = [
-        "accounts.google.com",  // Enable after Universal Links work
+        "accounts.google.com",  // Google Sign-In
         "google.com",             // Google domains
-        "github.com",           // Enable after Universal Links work
+        "googleapis.com",         // Google APIs
+        "github.com",           // GitHub OAuth
     ]
     
     // Callback URL scheme for deep links
@@ -69,8 +70,45 @@ class WebViewState: ObservableObject {
         webView?.goForward()
     }
     
+    
     func loadHome() {
         webView?.load(URLRequest(url: PWAConfig.pwaURL))
+    }
+    
+    /// Sync cookies from Safari's shared cookie storage to WKWebView
+    func syncCookies(completion: @escaping () -> Void = {}) {
+        let sharedCookies = HTTPCookieStorage.shared.cookies ?? []
+        let wkCookieStore = WKWebsiteDataStore.default().httpCookieStore
+        
+        // Filter for relevant domains
+        let relevantDomains = ["scottylabs.org", "google.com", "googleapis.com"]
+        let cookiesToSync = sharedCookies.filter { cookie in
+            relevantDomains.contains { domain in
+                cookie.domain.contains(domain)
+            }
+        }
+        
+        print("[AUTH] 📋 Found \(cookiesToSync.count) cookies to sync from \(sharedCookies.count) total")
+        
+        if cookiesToSync.isEmpty {
+            completion()
+            return
+        }
+        
+        let group = DispatchGroup()
+        
+        for cookie in cookiesToSync {
+            group.enter()
+            print("[AUTH] 🍪 Syncing cookie: \(cookie.name) for domain \(cookie.domain)")
+            wkCookieStore.setCookie(cookie) {
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .main) {
+            print("[AUTH] ✅ Cookie sync complete")
+            completion()
+        }
     }
 }
 
@@ -448,40 +486,7 @@ struct PWAWebView: UIViewRepresentable {
         }
         
         /// Sync cookies from Safari's shared cookie storage to WKWebView
-        private func syncCookiesToWebView(completion: @escaping () -> Void) {
-            let sharedCookies = HTTPCookieStorage.shared.cookies ?? []
-            let wkCookieStore = WKWebsiteDataStore.default().httpCookieStore
-            
-            // Filter for relevant domains
-            let relevantDomains = ["scottylabs.org", "google.com", "googleapis.com"]
-            let cookiesToSync = sharedCookies.filter { cookie in
-                relevantDomains.contains { domain in
-                    cookie.domain.contains(domain)
-                }
-            }
-            
-            print("[AUTH] 📋 Found \(cookiesToSync.count) cookies to sync from \(sharedCookies.count) total")
-            
-            if cookiesToSync.isEmpty {
-                completion()
-                return
-            }
-            
-            let group = DispatchGroup()
-            
-            for cookie in cookiesToSync {
-                group.enter()
-                print("[AUTH] 🍪 Syncing cookie: \(cookie.name) for domain \(cookie.domain)")
-                wkCookieStore.setCookie(cookie) {
-                    group.leave()
-                }
-            }
-            
-            group.notify(queue: .main) {
-                print("[AUTH] ✅ Cookie sync complete")
-                completion()
-            }
-        }
+
         
         // MARK: - UIScrollViewDelegate (Prevent Zooming)
         

@@ -200,6 +200,8 @@ pub struct CurrentProject {
     pub table_number: Option<String>,
     pub description: Option<String>,
     pub submission_data: serde_json::Value,
+    /// When the judge started visiting this project (for timer calculation)
+    pub start_time: chrono::NaiveDateTime,
 }
 
 /// Request to submit comparisons for all features at once
@@ -318,4 +320,11 @@ pub struct JudgeVisitNotes {
 #[cfg_attr(feature = "server", derive(ToSchema))]
 pub struct AiSummaryResponse {
     pub summary: String,
+}
+
+/// Response containing AI-generated suggested questions for judges
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "server", derive(ToSchema))]
+pub struct AiQuestionsResponse {
+    pub questions: Vec<String>,
 }

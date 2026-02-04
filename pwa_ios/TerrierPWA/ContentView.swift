@@ -51,8 +51,11 @@ struct ContentView: View {
             // Handle deep link URLs passed from the app
             if let url = url {
                 print("[UI] 🔗 Loading pending URL: \(url.absoluteString)")
-                webViewState.webView?.load(URLRequest(url: url))
-                appState.pendingURL = nil
+                // Sync cookies before loading the deep link to ensure session is present
+                webViewState.syncCookies {
+                    webViewState.webView?.load(URLRequest(url: url))
+                    appState.pendingURL = nil
+                }
             }
         }
     }

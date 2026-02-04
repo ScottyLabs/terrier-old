@@ -947,7 +947,7 @@ pub fn tartanhacks_submission_preset() -> FormSchema {
 }
 
 pub fn tartanhacks_apple_app_site_association() -> String {
-    let content = "
+    let content = "{
     \"applinks\": {
         \"apps\": [],
         \"details\": [

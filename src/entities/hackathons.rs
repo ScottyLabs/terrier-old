@@ -32,6 +32,9 @@ pub struct Model {
     pub submissions_closed: bool,
     pub judging_started: bool,
     pub judge_session_timeout_minutes: i32,
+    pub proximity_routing_enabled: bool,
+    pub room_width: i32,
+    pub judging_timer_seconds: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

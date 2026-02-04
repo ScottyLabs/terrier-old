@@ -1,4 +1,6 @@
-use crate::ui::features::dashboard::{QRModal, QRTile, TablePromptModal};
+use crate::ui::features::dashboard::{
+    HackerGuideTile, QRModal, QRTile, TablePromptModal, TimerTile,
+};
 
 use crate::{
     auth::{DASHBOARD_ROLES, HackathonRole, hooks::use_require_access_or_redirect},
@@ -24,7 +26,11 @@ pub fn HackathonDashboard(slug: String) -> Element {
             "Dashboard"
         }
         // Tile grid
-        div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6", QRTile {} }
+        div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6",
+            TimerTile {}
+            QRTile {}
+            HackerGuideTile {}
+        }
 
         // Prompt for table assignment if participant, submissions are closed, and hackathon is active
         if is_participant && hackathon.read().submissions_closed && hackathon.read().is_active {

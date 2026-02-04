@@ -201,6 +201,9 @@ impl From<hackathons::Model> for HackathonInfo {
             submissions_closed: h.submissions_closed,
             judging_started: h.judging_started,
             judge_session_timeout_minutes: h.judge_session_timeout_minutes,
+            proximity_routing_enabled: h.proximity_routing_enabled,
+            room_width: h.room_width,
+            judging_timer_seconds: h.judging_timer_seconds,
         }
     }
 }

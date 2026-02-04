@@ -116,6 +116,9 @@ pub async fn create_hackathon(req: CreateHackathonRequest) -> Result<HackathonIn
         submissions_closed: hackathon.submissions_closed,
         judging_started: hackathon.judging_started,
         judge_session_timeout_minutes: hackathon.judge_session_timeout_minutes,
+        proximity_routing_enabled: hackathon.proximity_routing_enabled,
+        room_width: hackathon.room_width,
+        judging_timer_seconds: hackathon.judging_timer_seconds,
     })
 }
 

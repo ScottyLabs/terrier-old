@@ -217,6 +217,7 @@ pub async fn get_unified_state(slug: String) -> Result<UnifiedJudgingState, Serv
                 .and_then(|d| d.as_str())
                 .map(|s| s.to_string()),
             submission_data: sub.submission_data,
+            start_time: visit.start_time,
         })
     } else {
         None
@@ -551,18 +552,19 @@ pub async fn request_next_project(slug: String) -> Result<Option<CurrentProject>
         .unwrap_or_default();
 
     // Helper function to parse table coordinates (L1 distance calculation)
-    fn parse_table_coords(table_number: &str) -> Option<(i32, i32)> {
+    // Uses the configured room_width to determine X/Y coordinates from table number
+    let room_width = hackathon.room_width;
+    let parse_table_coords = |table_number: &str| -> Option<(i32, i32)> {
         let num: i32 = table_number.parse().ok()?;
-        if num < 10 {
+        if num < room_width {
             Some((num, 0)) // X = full number, Y = 0
         } else {
-            Some((num % 10, num / 10)) // X = last digit, Y = rest
+            Some((num % room_width, num / room_width)) // X = last digit, Y = rest
         }
-    }
+    };
 
-    fn l1_distance(a: (i32, i32), b: (i32, i32)) -> i32 {
-        (a.0 - b.0).abs() + (a.1 - b.1).abs()
-    }
+    let l1_distance =
+        |a: (i32, i32), b: (i32, i32)| -> i32 { (a.0 - b.0).abs() + (a.1 - b.1).abs() };
 
     // Phase 1: Prioritize submissions with < 2 visits
     let under_visited: Vec<&submission::Model> = available_submissions
@@ -742,6 +744,7 @@ pub async fn request_next_project(slug: String) -> Result<Option<CurrentProject>
             .and_then(|d| d.as_str())
             .map(|s| s.to_string()),
         submission_data: selected_sub.submission_data.clone(),
+        start_time: visit.start_time,
     }))
 }
 
@@ -987,4 +990,160 @@ async fn get_valid_submissions_for_judge<C: sea_orm::ConnectionTrait>(
         valid_submission_ids.into_iter().collect(),
         submissions_with_entries.into_iter().collect(),
     ))
+}
+
+/// Generate AI-suggested questions for a judge to ask about a project
+#[cfg_attr(feature = "server", utoipa::path(
+    post,
+    path = "/api/hackathons/{slug}/judging/generate-questions/{submission_id}",
+    params(
+        ("slug" = String, Path, description = "Hackathon slug"),
+        ("submission_id" = i32, Path, description = "Submission ID")
+    ),
+    responses(
+        (status = 200, description = "AI questions generated", body = AiQuestionsResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Server error")
+    ),
+    tag = "judging"
+))]
+#[post("/api/hackathons/:slug/judging/generate-questions/:submission_id", user: SyncedUser)]
+pub async fn generate_judging_questions(
+    slug: String,
+    submission_id: i32,
+) -> Result<AiQuestionsResponse, ServerFnError> {
+    use crate::entities::{submission, teams};
+    use sea_orm::EntityTrait;
+
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
+
+    let hackathon = ctx.hackathon()?;
+
+    // Get the submission
+    let sub = submission::Entity::find_by_id(submission_id)
+        .one(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch submission: {}", e)))?
+        .ok_or_else(|| ServerFnError::new("Submission not found"))?;
+
+    // Get team and verify hackathon
+    let team = teams::Entity::find_by_id(sub.team_id)
+        .one(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch team: {}", e)))?
+        .ok_or_else(|| ServerFnError::new("Team not found"))?;
+
+    if team.hackathon_id != hackathon.id {
+        return Err(ServerFnError::new("Submission not found in this hackathon"));
+    }
+
+    // Get project details
+    let project_name = sub
+        .submission_data
+        .get("projectName")
+        .and_then(|n| n.as_str())
+        .unwrap_or("Untitled Project");
+
+    let description = sub
+        .submission_data
+        .get("description")
+        .and_then(|d| d.as_str())
+        .unwrap_or("No description provided.");
+
+    // Check if we have an API key
+    let api_key = match &ctx.state.config.openrouter_api_key {
+        Some(key) if !key.is_empty() => key.clone(),
+        _ => {
+            // Return fallback questions if no API key
+            return Ok(AiQuestionsResponse {
+                questions: vec![
+                    "What was the most challenging technical aspect of your project?".to_string(),
+                    "How did you decide on this idea?".to_string(),
+                    "What would you do differently if you had more time?".to_string(),
+                    "How does your project stand out from similar solutions?".to_string(),
+                    "What's your plan for the future development of this project?".to_string(),
+                ],
+            });
+        }
+    };
+
+    // Build the prompt
+    let prompt = format!(
+        "You are a hackathon judge assistant. Generate 5 insightful, thought-provoking questions \
+         that a judge should ask the team about their project. The questions should help evaluate \
+         technical depth, creativity, feasibility, and teamwork. Make them specific to this project.\n\n\
+         Project Name: {}\n\
+         Description: {}\n\n\
+         Provide exactly 5 questions, one per line, without numbering or bullet points. \
+         Focus on questions that will reveal the team's understanding and decision-making process.",
+        project_name, description
+    );
+
+    // Call OpenRouter API
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| ServerFnError::new(format!("Failed to build HTTP client: {}", e)))?;
+
+    let response = client
+        .post("https://openrouter.ai/api/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "model": "google/gemini-3-flash-preview",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "max_tokens": 500,
+            "temperature": 0.7
+        }))
+        .send()
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to call OpenRouter: {}", e)))?;
+
+    if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(ServerFnError::new(format!(
+            "OpenRouter API error: {}",
+            error_text
+        )));
+    }
+
+    let response_json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to parse OpenRouter response: {}", e)))?;
+
+    let content = response_json["choices"]
+        .get(0)
+        .and_then(|c| c["message"]["content"].as_str())
+        .unwrap_or("");
+
+    // Parse the questions (each line is a question)
+    let questions: Vec<String> = content
+        .lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .take(5)
+        .map(|s| s.to_string())
+        .collect();
+
+    // Return at least fallback questions if parsing failed
+    if questions.is_empty() {
+        return Ok(AiQuestionsResponse {
+            questions: vec![
+                "What was the most challenging technical aspect of your project?".to_string(),
+                "How did you decide on this idea?".to_string(),
+                "What would you do differently if you had more time?".to_string(),
+            ],
+        });
+    }
+
+    Ok(AiQuestionsResponse { questions })
 }
