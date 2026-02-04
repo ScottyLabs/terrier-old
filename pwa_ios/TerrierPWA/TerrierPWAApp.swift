@@ -71,7 +71,7 @@ struct TerrierPWAApp: App {
             let path = pathComponents.joined(separator: "/")
             
             // Construct the web URL
-            var webURLString = "https://terrier.scottylabs.org/\(path)"
+            var webURLString = "https://terrier-staging.scottylabs.org/\(path)"
             if let query = url.query {
                 webURLString += "?\(query)"
             }

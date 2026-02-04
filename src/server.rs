@@ -325,9 +325,10 @@ pub async fn setup() {
 
     // Create the main router with API routes and Dioxus app
     // Note: public_router is merged first so its routes take precedence
-    let router = dioxus_router
-        .merge(api_router)
+    let router = Router::new()
         .merge(public_router)
+        .merge(dioxus_router)
+        .merge(api_router)
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)); // 10 MB limit for file uploads
 
     // Get address from CLI config or default to localhost:8080

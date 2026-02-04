@@ -6,7 +6,7 @@ import SafariServices
 
 /// Configuration for the PWA
 struct PWAConfig {
-    static let pwaURL = URL(string: "https://terrier.scottylabs.org/h/tartanhacks-2026")!
+    static let pwaURL = URL(string: "https://terrier-staging.scottylabs.org/h/tartantest")!
     
     // Main app domain
     static let allowedHosts = ["scottylabs.org"]
@@ -847,8 +847,8 @@ struct PWAWebView: UIViewRepresentable {
             case "terrier":
                 // Handle terrier:// deep links (e.g., terrier://auth/callback)
                 print("[NET] 🔗 Terrier deep link: \(url.absoluteString)")
-                // Convert terrier:// to https://terrier.scottylabs.org/
-                // terrier://auth/callback?code=xxx -> https://terrier.scottylabs.org/auth/callback?code=xxx
+                // Convert terrier:// to https://terrier-staging.scottylabs.org/
+                // terrier://auth/callback?code=xxx -> https://terrier-staging.scottylabs.org/auth/callback?code=xxx
                 var pathComponents = [String]()
                 if let host = url.host {
                     pathComponents.append(host)
@@ -858,7 +858,7 @@ struct PWAWebView: UIViewRepresentable {
                 }
                 let path = pathComponents.joined(separator: "/")
                 
-                var webURLString = "https://terrier.scottylabs.org/\(path)"
+                var webURLString = "https://terrier-staging.scottylabs.org/\(path)"
                 if let query = url.query {
                     webURLString += "?\(query)"
                 }

@@ -113,6 +113,7 @@
 	<key>WKAppBoundDomains</key>
 	<array>
 		<string>terrier.scottylabs.org</string>
+        <string>terrier-staging.scottylabs.org</string>
 		<string>idp.scottylabs.org</string>
 		<string>scottylabs.org</string>
 	</array>
