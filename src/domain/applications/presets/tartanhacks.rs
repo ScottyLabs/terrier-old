@@ -953,8 +953,10 @@ pub fn tartanhacks_apple_app_site_association() -> String {
         \"details\": [
             {
                 \"appIDs\": [
-                    \"4Y39FMA838.org.scottylabs.terrier\",
-                    \"X39S5JJUD8.org.scottylabs.terrier\"
+                    \"4Y39FMA838.org.scottylabs.slapp\",
+                    \"X39S5JJUD8.org.scottylabs.slapp\",
+                    \"4Y39FMA838.terrier.scottylabs.org\",
+                    \"X39S5JJUD8.terrier.scottylabs.org\"
                 ],
                 \"paths\": [
                     \"/auth/*\",
@@ -980,8 +982,10 @@ pub fn tartanhacks_apple_app_site_association() -> String {
     },
     \"webcredentials\": {
         \"apps\": [
-            \"4Y39FMA838.org.scottylabs.terrier\",
-            \"X39S5JJUD8.org.scottylabs.terrier\"
+            \"4Y39FMA838.org.scottylabs.slapp\",
+            \"X39S5JJUD8.org.scottylabs.slapp\",
+            \"4Y39FMA838.terrier.scottylabs.org\",
+            \"X39S5JJUD8.terrier.scottylabs.org\"
         ]
     }
 }";
