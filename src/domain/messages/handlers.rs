@@ -1,16 +1,26 @@
-use crate::core::auth::{context::RequestContext, middleware::SyncedUser, permissions::Permissions};
-use crate::domain::messages::{message_groups, messages};
-use crate::entities::prelude::*;
-use crate::AppState;
 use dioxus::prelude::ServerFnError;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
-use utoipa::ToSchema;
-
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use axum::Json;
 
-#[derive(Serialize, ToSchema)]
+#[cfg(feature = "server")]
+use crate::AppState;
+#[cfg(feature = "server")]
+use crate::core::auth::{
+    context::RequestContext, middleware::SyncedUser, permissions::Permissions,
+};
+#[cfg(feature = "server")]
+use crate::domain::messages::{message_groups, messages};
+#[cfg(feature = "server")]
+use crate::entities::prelude::*;
+#[cfg(feature = "server")]
+use axum::Json;
+#[cfg(feature = "server")]
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+#[cfg(feature = "server")]
+use utoipa::ToSchema;
+
+#[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "server", derive(ToSchema))]
 pub struct MessageResponse {
     pub id: i32,
     pub sender_user_id: i32,
@@ -22,7 +32,8 @@ pub struct MessageResponse {
     pub created_at: chrono::NaiveDateTime,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "server", derive(ToSchema))]
 pub struct CreateMessageRequest {
     pub sender_user_id: i32,
     /// recipient_id: NULL for everyone, or the id of the team/user depending on recipient_type
@@ -35,35 +46,44 @@ pub struct CreateMessageRequest {
 
 /// Create a new message (admins/organizers only)
 #[cfg_attr(feature = "server", utoipa::path(
-    post,
-    path = "/api/hackathons/{slug}/messages",
-    params(("slug" = String, Path, description = "Hackathon slug")),
-    request_body = CreateMessageRequest,
-    responses(
-        (status = 200, description = "Message created", body = MessageResponse),
-        (status = 401, description = "Unauthorized"),
-        (status = 403, description = "Forbidden")
-    ),
-    tag = "messages"
+	post,
+	path = "/api/hackathons/{slug}/messages",
+	params(("slug" = String, Path, description = "Hackathon slug")),
+	request_body = CreateMessageRequest,
+	responses(
+		(status = 200, description = "Message created", body = MessageResponse),
+		(status = 401, description = "Unauthorized"),
+		(status = 403, description = "Forbidden")
+	),
+	tag = "messages"
 ))]
 #[post("/api/hackathons/:slug/messages", user: SyncedUser)]
 pub async fn create_message(slug: String, req: CreateMessageRequest) -> Result<(), ServerFnError> {
     use sea_orm::Set;
 
-    let ctx = RequestContext::extract(&user).await?.with_hackathon(&slug).await?;
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
 
     // check admin/organizer
     Permissions::require_admin_or_organizer(&ctx).await?;
 
     // normalize recipient_type
-    let recipient_type = req
-        .recipient_type
-        .clone()
-        .unwrap_or_else(|| if req.recipient_id.is_none() { "all".to_string() } else { "user".to_string() });
+    let recipient_type = req.recipient_type.clone().unwrap_or_else(|| {
+        if req.recipient_id.is_none() {
+            "all".to_string()
+        } else {
+            "user".to_string()
+        }
+    });
 
     // find or create message_group
     let existing = crate::domain::messages::message_groups::Entity::find()
-        .filter(crate::domain::messages::message_groups::Column::RecipientType.eq(recipient_type.clone()))
+        .filter(
+            crate::domain::messages::message_groups::Column::RecipientType
+                .eq(recipient_type.clone()),
+        )
         .filter(crate::domain::messages::message_groups::Column::RecipientId.eq(req.recipient_id))
         .one(&ctx.state.db)
         .await
@@ -72,7 +92,7 @@ pub async fn create_message(slug: String, req: CreateMessageRequest) -> Result<(
     let group_id = if let Some(g) = existing {
         g.id
     } else {
-        let new_group = crate::entities::message_groups::ActiveModel {
+        let new_group = message_groups::ActiveModel {
             flag: Set("admin_message".to_string()),
             recipient_id: Set(req.recipient_id),
             recipient_type: Set(recipient_type.clone()),
@@ -89,7 +109,7 @@ pub async fn create_message(slug: String, req: CreateMessageRequest) -> Result<(
     };
 
     // create message
-    let new_msg = crate::entities::messages::ActiveModel {
+    let new_msg = messages::ActiveModel {
         sender_user_id: Set(req.sender_user_id),
         message_group_id: Set(group_id),
         title: Set(req.title),
@@ -109,15 +129,21 @@ pub async fn create_message(slug: String, req: CreateMessageRequest) -> Result<(
 
 /// Get all messages visible to a user (everyone, to the user, or to their team)
 #[cfg_attr(feature = "server", utoipa::path(
-    get,
-    path = "/api/hackathons/{slug}/messages/user/{user_id}",
-    params(("slug" = String, Path, description = "Hackathon slug"), ("user_id" = i32, Path, description = "User ID")),
-    responses((status = 200, description = "Messages for user", body = Vec<MessageResponse))),
-    tag = "messages"
+	get,
+	path = "/api/hackathons/{slug}/messages/user/{user_id}",
+	params(("slug" = String, Path, description = "Hackathon slug"), ("user_id" = i32, Path, description = "User ID")),
+	responses((status = 200, description = "Messages for user", body = Vec<MessageResponse>)),
+	tag = "messages"
 ))]
 #[get("/api/hackathons/:slug/messages/user/:user_id", user: SyncedUser)]
-pub async fn get_messages(slug: String, user_id: i32) -> Result<Json<Vec<MessageResponse>>, ServerFnError> {
-    let ctx = RequestContext::extract(&user).await?.with_hackathon(&slug).await?;
+pub async fn get_messages(
+    slug: String,
+    user_id: i32,
+) -> Result<Vec<MessageResponse>, ServerFnError> {
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
 
     // allow if requester is the user or admin/organizer
     if ctx.user.id != user_id {
@@ -138,8 +164,8 @@ pub async fn get_messages(slug: String, user_id: i32) -> Result<Json<Vec<Message
     let mut group_ids: Vec<i32> = Vec::new();
 
     // all
-    let all_groups = crate::entities::prelude::MessageGroups::find()
-        .filter(crate::domain::messages::message_groups::Column::RecipientType.eq("all"))
+    let all_groups = message_groups::Entity::find()
+        .filter(message_groups::Column::RecipientType.eq("all"))
         .all(&ctx.state.db)
         .await
         .map_err(|e| ServerFnError::new(format!("DB error: {}", e)))?;
@@ -166,7 +192,7 @@ pub async fn get_messages(slug: String, user_id: i32) -> Result<Json<Vec<Message
     }
 
     if group_ids.is_empty() {
-        return Ok(Json(Vec::new()));
+        return Ok(Vec::new());
     }
 
     let msgs = crate::domain::messages::messages::Entity::find()
@@ -183,7 +209,7 @@ pub async fn get_messages(slug: String, user_id: i32) -> Result<Json<Vec<Message
             .map_err(|e| ServerFnError::new(format!("DB error: {}", e)))?;
 
         let (rtype, rid) = if let Some(g) = group {
-            (g.recipient_type.clone(), g.recipient_id)
+            (Some(g.recipient_type.clone()), g.recipient_id)
         } else {
             (None, None)
         };
@@ -200,5 +226,48 @@ pub async fn get_messages(slug: String, user_id: i32) -> Result<Json<Vec<Message
         });
     }
 
-    Ok(Json(resp))
+    Ok(resp)
+}
+
+#[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "server", derive(ToSchema))]
+pub struct MessageGroupInfo {
+    pub id: i32,
+    pub flag: String,
+    pub recipient_id: Option<i32>,
+    pub recipient_type: String,
+}
+
+/// List message groups (admins/organizers only)
+#[cfg_attr(feature = "server", utoipa::path(
+    get,
+    path = "/api/hackathons/{slug}/message_groups",
+    params(("slug" = String, Path, description = "Hackathon slug")),
+    responses((status = 200, description = "Message groups", body = Vec<MessageGroupInfo>)),
+    tag = "messages"
+))]
+#[get("/api/hackathons/:slug/message_groups", user: SyncedUser)]
+pub async fn get_message_groups(slug: String) -> Result<Vec<MessageGroupInfo>, ServerFnError> {
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
+    Permissions::require_admin_or_organizer(&ctx).await?;
+
+    let groups = crate::domain::messages::message_groups::Entity::find()
+        .all(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("DB error: {}", e)))?;
+
+    let resp = groups
+        .into_iter()
+        .map(|g| MessageGroupInfo {
+            id: g.id,
+            flag: g.flag,
+            recipient_id: g.recipient_id,
+            recipient_type: g.recipient_type,
+        })
+        .collect();
+
+    Ok(resp)
 }
