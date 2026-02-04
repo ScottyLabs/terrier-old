@@ -23,6 +23,7 @@ use utoipa::ToSchema;
 #[cfg_attr(feature = "server", derive(ToSchema))]
 pub struct MessageResponse {
     pub id: i32,
+    pub sender: String,
     pub sender_user_id: i32,
     pub message_group_id: i32,
     pub recipient_type: Option<String>,
@@ -140,6 +141,7 @@ pub async fn get_messages(
     slug: String,
     user_id: i32,
 ) -> Result<Vec<MessageResponse>, ServerFnError> {
+    use crate::entities::users;
     let ctx = RequestContext::extract(&user)
         .await?
         .with_hackathon(&slug)
@@ -214,8 +216,16 @@ pub async fn get_messages(
             (None, None)
         };
 
+        let user_model = users::Entity::find_by_id(m.sender_user_id)
+            .one(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch user: {}", e)))?
+            .ok_or_else(|| ServerFnError::new("User not found"))?;
+        let name = user_model.name.unwrap_or_else(|| "Unknown".to_string());
+
         resp.push(MessageResponse {
             id: m.id,
+            sender: name,
             sender_user_id: m.sender_user_id,
             message_group_id: m.message_group_id,
             recipient_type: rtype,

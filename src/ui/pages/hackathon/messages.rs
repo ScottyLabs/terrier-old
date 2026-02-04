@@ -416,7 +416,7 @@ pub fn HackathonMessages(slug: String) -> Element {
                                         .next()
                                         .unwrap_or("Announcement")
                                         .to_string(),
-                                    sender: format!("User {}", m.sender_user_id),
+                                    sender: m.sender.clone(),
                                     tag,
                                     time: format_time(&m.created_at),
                                     content: m.content.clone(),
@@ -850,7 +850,7 @@ pub fn HackathonMessages(slug: String) -> Element {
                                                                                     .next()
                                                                                     .unwrap_or("Announcement")
                                                                                     .to_string(),
-                                                                                sender: format!("User {}", m.sender_user_id),
+                                                                                sender: m.sender.clone(),
                                                                                 tag: "All".to_string(),
                                                                                 time: format_time(&m.created_at),
                                                                                 content: m.content.clone(),
