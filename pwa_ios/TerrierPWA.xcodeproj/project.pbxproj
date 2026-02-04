@@ -295,7 +295,7 @@
 				);
 				MARKETING_VERSION = 6.0.0;
 				"MARKETING_VERSION[sdk=iphoneos*]" = 6.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = terrier.scottylabs.org;
+				PRODUCT_BUNDLE_IDENTIFIER = org.scottylabs.terrier;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

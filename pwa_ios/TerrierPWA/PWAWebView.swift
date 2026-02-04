@@ -6,7 +6,7 @@ import SafariServices
 
 /// Configuration for the PWA
 struct PWAConfig {
-    static let pwaURL = URL(string: "https://terrier-staging.scottylabs.org/h/tartantest")!
+    static let pwaURL = URL(string: "https://terrier.scottylabs.org/h/tartanhacks-2026")!
     
     // Main app domain
     static let allowedHosts = ["scottylabs.org"]
@@ -16,9 +16,11 @@ struct PWAConfig {
     static let authProviderHosts = [
         "login.cmu.edu",          // CMU Shibboleth
         "idp.cmu.edu",            // CMU Identity Provider
-        // "accounts.google.com",    // Google OAuth (Moved to external browser auth)
-        // "google.com",             // Google domains (Moved to external browser auth)
-        // "googleapis.com",         // Google APIs (Moved to external browser auth)
+        "accounts.google.com",    // Google OAuth (Spoofed UA allowed)
+        "google.com",             // Google domains
+        "googleapis.com",         // Google APIs
+        "youtube.com",            // YouTube
+        "youtu.be",               // YouTube Short Links
         "auth0.com",              // Auth0
         "okta.com",               // Okta
         "microsoftonline.com",    // Microsoft/Azure AD
@@ -29,14 +31,12 @@ struct PWAConfig {
     ]
     
     // Providers that MUST use external browser (ASWebAuthenticationSession)
-    // NOTE: Until Universal Links are fully configured (TEAMID in AASA file),
-    // external browser auth won't work. Keep this list empty for now.
-    // Once Universal Links are working, add providers that block WebView here.
+    // NOTE: Google removed from here to allow inline auth via UA spoofing
     static let externalBrowserAuthHosts: [String] = [
-        "accounts.google.com",  // Google Sign-In
-        "google.com",             // Google domains
-        "googleapis.com",         // Google APIs
-        "github.com",           // GitHub OAuth
+        // "accounts.google.com",  // Google Sign-In
+        // "google.com",             // Google domains
+        // "googleapis.com",         // Google APIs
+        // "github.com",           // GitHub OAuth
     ]
     
     // Callback URL scheme for deep links
@@ -175,6 +175,13 @@ struct PWAWebView: UIViewRepresentable {
         webView.backgroundColor = PWAConfig.backgroundColor
         webView.isOpaque = false
         
+        // START GOOGLE AUTH SPOOF
+        // We spoof the User Agent to look like a standard browser (not embedded WebView)
+        // This allows Google Sign-In to work inline without being blocked.
+        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
+        // END GOOGLE AUTH SPOOF
+        
+        
         // Disable zooming for app-like feel
         webView.scrollView.minimumZoomScale = 1.0
         webView.scrollView.maximumZoomScale = 1.0
@@ -299,8 +306,9 @@ struct PWAWebView: UIViewRepresentable {
         // PWA Native App Detection
         // ========================================
         // Notify the PWA that it's running in a native wrapper
-        window.isNativeApp = true;
-        window.isiOSApp = true;
+        // NOTE: Commented out to follow "Simpler Approach" where web app doesn't need to know
+        // window.isNativeApp = true;
+        // window.isiOSApp = true;
         
         // Disable zooming via viewport meta tag
         var viewport = document.querySelector('meta[name="viewport"]');

@@ -17,7 +17,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>6.0.0</string>
+	<string>6.0.1</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -30,7 +30,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>543</string>
+	<string>544</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSApplicationQueriesSchemes</key>
@@ -113,7 +113,7 @@
 	<key>WKAppBoundDomains</key>
 	<array>
 		<string>terrier.scottylabs.org</string>
-        <string>terrier-staging.scottylabs.org</string>
+		<string>terrier-staging.scottylabs.org</string>
 		<string>idp.scottylabs.org</string>
 		<string>scottylabs.org</string>
 	</array>
