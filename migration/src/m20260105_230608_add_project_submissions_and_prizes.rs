@@ -109,7 +109,7 @@ impl MigrationTrait for Migration {
 }
 
 #[derive(DeriveIden)]
-enum Submission {
+pub enum Submission {
     Id,
     Table,
     TeamId,
@@ -126,7 +126,7 @@ enum PrizeTrackEntry {
 }
 
 #[derive(DeriveIden)]
-enum Prize {
+pub enum Prize {
     Id,
     Table,
     Name,

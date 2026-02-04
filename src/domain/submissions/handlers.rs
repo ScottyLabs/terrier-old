@@ -15,6 +15,7 @@ pub struct SubmissionData {
     pub id: i32,
     pub team_id: i32,
     pub submission_data: JsonValue,
+    pub table_number: Option<String>,
     pub prize_track_ids: Vec<i32>,
     pub submitted_at: String,
 }
@@ -24,6 +25,7 @@ pub struct SubmissionData {
 #[cfg_attr(feature = "server", derive(ToSchema))]
 pub struct SubmitProjectRequest {
     pub submission_data: JsonValue,
+    pub table_number: Option<String>,
     pub prize_track_ids: Vec<i32>,
 }
 
@@ -91,6 +93,7 @@ pub async fn get_submission(slug: String) -> Result<Option<SubmissionData>, Serv
                 id: sub.id,
                 team_id: sub.team_id,
                 submission_data: sub.submission_data,
+                table_number: sub.table_number,
                 prize_track_ids,
                 submitted_at: sub.submitted_at.to_string(),
             }))
@@ -121,7 +124,7 @@ pub async fn submit_project(
     request: SubmitProjectRequest,
 ) -> Result<SubmissionData, ServerFnError> {
     use crate::domain::teams::repository::TeamRepository;
-    use crate::entities::{prize_track_entry, submission};
+    use crate::entities::{event_checkins, prize_required_events, prize_track_entry, submission};
     use sea_orm::{
         ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, QueryFilter, Set,
     };
@@ -140,6 +143,52 @@ pub async fn submit_project(
         .await?
         .ok_or_else(|| ServerFnError::new("You must be on a team to submit a project"))?;
 
+    // Validate prize requirements
+    if !request.prize_track_ids.is_empty() {
+        // Get all required events for selected prizes
+        let requirements = prize_required_events::Entity::find()
+            .filter(prize_required_events::Column::PrizeId.is_in(request.prize_track_ids.clone()))
+            .all(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch requirements: {}", e)))?;
+
+        if !requirements.is_empty() {
+            let required_event_ids: Vec<i32> = requirements.iter().map(|r| r.event_id).collect();
+
+            // content of required events for error message
+            // Ideally we'd fetch event names here but IDs are enough for logic
+
+            // Check team check-ins (ANY team member counts)
+            let team_members = team_repo
+                .get_team_member_roles(team_id, hackathon.id)
+                .await?;
+            let team_user_ids: Vec<i32> = team_members.iter().map(|m| m.user_id).collect();
+
+            let checkins = event_checkins::Entity::find()
+                .filter(event_checkins::Column::UserId.is_in(team_user_ids))
+                .filter(event_checkins::Column::EventId.is_in(required_event_ids.clone()))
+                .all(&ctx.state.db)
+                .await
+                .map_err(|e| ServerFnError::new(format!("Failed to fetch checkins: {}", e)))?;
+
+            let checked_in_ids: std::collections::HashSet<i32> =
+                checkins.iter().map(|c| c.event_id).collect();
+
+            for req in requirements {
+                if !checked_in_ids.contains(&req.event_id) {
+                    return Err(ServerFnError::new(
+                        "Your team must have at least one member checked in to all required events for the selected prize tracks.",
+                    ));
+                }
+            }
+        }
+    }
+
+    // Validate table number if provided
+    if let Some(table_number) = &request.table_number {
+        validate_table_number(table_number)?;
+    }
+
     // Check if submission already exists
     let existing = submission::Entity::find()
         .filter(submission::Column::TeamId.eq(team_id))
@@ -151,6 +200,9 @@ pub async fn submit_project(
         // Update existing submission
         let mut active: submission::ActiveModel = existing_sub.into();
         active.submission_data = Set(request.submission_data.clone());
+        if request.table_number.is_some() {
+            active.table_number = Set(request.table_number.clone());
+        }
 
         active
             .update(&ctx.state.db)
@@ -163,6 +215,7 @@ pub async fn submit_project(
             id: NotSet,
             team_id: Set(team_id),
             submission_data: Set(request.submission_data.clone()),
+            table_number: Set(request.table_number.clone()),
             submitted_at: Set(now),
         };
 
@@ -198,9 +251,69 @@ pub async fn submit_project(
         id: sub.id,
         team_id: sub.team_id,
         submission_data: sub.submission_data,
+        table_number: sub.table_number,
         prize_track_ids: request.prize_track_ids,
         submitted_at: sub.submitted_at.to_string(),
     })
+}
+
+/// Automatically set the table number for a team's submission
+#[cfg_attr(feature = "server", utoipa::path(
+    post,
+    path = "/api/hackathons/{slug}/submission/table",
+    params(
+        ("slug" = String, Path, description = "Hackathon slug")
+    ),
+    request_body = String,
+    responses(
+        (status = 200, description = "Table number set successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Submission not found"),
+        (status = 500, description = "Server error")
+    ),
+    tag = "submissions"
+))]
+#[post("/api/hackathons/:slug/submission/table", user: SyncedUser)]
+pub async fn set_table_number(slug: String, table_number: String) -> Result<(), ServerFnError> {
+    use crate::domain::teams::repository::TeamRepository;
+    use crate::entities::submission;
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
+
+    let hackathon = ctx.hackathon()?;
+
+    // Get user's team
+    let team_repo = TeamRepository::new(&ctx.state.db);
+    let team_id = team_repo
+        .find_user_team(ctx.user.id, hackathon.id)
+        .await?
+        .ok_or_else(|| ServerFnError::new("You must be on a team to set a table number"))?;
+
+    // Find submission for this team
+    let sub = submission::Entity::find()
+        .filter(submission::Column::TeamId.eq(team_id))
+        .one(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch submission: {}", e)))?
+        .ok_or_else(|| ServerFnError::new("No submission found. Submit a project first."))?;
+
+    // Validate table number
+    validate_table_number(&table_number)?;
+
+    // Update table number
+    let mut active: submission::ActiveModel = sub.into();
+    active.table_number = Set(Some(table_number));
+
+    active
+        .update(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to update table number: {}", e)))?;
+
+    Ok(())
 }
 
 /// Update prize tracks for an existing submission
@@ -225,7 +338,7 @@ pub async fn update_prize_tracks(
     request: UpdatePrizeTracksRequest,
 ) -> Result<(), ServerFnError> {
     use crate::domain::teams::repository::TeamRepository;
-    use crate::entities::{prize_track_entry, submission};
+    use crate::entities::{event_checkins, prize_required_events, prize_track_entry, submission};
     use sea_orm::{
         ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, QueryFilter, Set,
     };
@@ -243,6 +356,44 @@ pub async fn update_prize_tracks(
         .find_user_team(ctx.user.id, hackathon.id)
         .await?
         .ok_or_else(|| ServerFnError::new("You must be on a team to update prize tracks"))?;
+
+    // Validate prize requirements
+    if !request.prize_track_ids.is_empty() {
+        // Get all required events for selected prizes
+        let requirements = prize_required_events::Entity::find()
+            .filter(prize_required_events::Column::PrizeId.is_in(request.prize_track_ids.clone()))
+            .all(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch requirements: {}", e)))?;
+
+        if !requirements.is_empty() {
+            let required_event_ids: Vec<i32> = requirements.iter().map(|r| r.event_id).collect();
+
+            // Check team check-ins (ANY team member counts)
+            let team_members = team_repo
+                .get_team_member_roles(team_id, hackathon.id)
+                .await?;
+            let team_user_ids: Vec<i32> = team_members.iter().map(|m| m.user_id).collect();
+
+            let checkins = event_checkins::Entity::find()
+                .filter(event_checkins::Column::UserId.is_in(team_user_ids))
+                .filter(event_checkins::Column::EventId.is_in(required_event_ids.clone()))
+                .all(&ctx.state.db)
+                .await
+                .map_err(|e| ServerFnError::new(format!("Failed to fetch checkins: {}", e)))?;
+
+            let checked_in_ids: std::collections::HashSet<i32> =
+                checkins.iter().map(|c| c.event_id).collect();
+
+            for req in requirements {
+                if !checked_in_ids.contains(&req.event_id) {
+                    return Err(ServerFnError::new(
+                        "Your team must have at least one member checked in to all required events for the selected prize tracks.",
+                    ));
+                }
+            }
+        }
+    }
 
     // Find submission for this team
     let sub = submission::Entity::find()
@@ -273,5 +424,33 @@ pub async fn update_prize_tracks(
             .map_err(|e| ServerFnError::new(format!("Failed to add prize track: {}", e)))?;
     }
 
+    Ok(())
+}
+
+/// Helper to validate table number format
+fn validate_table_number(table_number: &str) -> Result<(), ServerFnError> {
+    if table_number.is_empty() {
+        return Err(ServerFnError::new("Table number cannot be empty"));
+    }
+
+    // Allow alphanumeric (e.g. "A12", "B4"), but if it's purely numeric, ensure it's positive
+    if table_number.chars().all(|c| c.is_numeric()) {
+        let parsed: i32 = table_number
+            .parse()
+            .map_err(|_| ServerFnError::new("Table number must be a valid integer"))?;
+        if parsed <= 0 {
+            return Err(ServerFnError::new(
+                "Table number must be a positive integer",
+            ));
+        }
+    } else if !table_number
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        // Basic sanity check for alphanumeric format
+        return Err(ServerFnError::new(
+            "Table number must contain only letters, numbers, hyphens, or underscores",
+        ));
+    }
     Ok(())
 }

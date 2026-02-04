@@ -14,12 +14,21 @@ pub struct Model {
     #[sea_orm(column_type = "JsonBinary")]
     pub submission_data: Json,
     pub submitted_at: DateTime,
+    pub table_number: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(has_many = "super::judge_feature_assignment::Entity")]
+    JudgeFeatureAssignment,
     #[sea_orm(has_many = "super::prize_track_entry::Entity")]
     PrizeTrackEntry,
+    #[sea_orm(has_many = "super::project_feature_score::Entity")]
+    ProjectFeatureScore,
+    #[sea_orm(has_many = "super::project_visit::Entity")]
+    ProjectVisit,
+    #[sea_orm(has_one = "super::submission_ai_summary::Entity")]
+    SubmissionAiSummary,
     #[sea_orm(
         belongs_to = "super::teams::Entity",
         from = "Column::TeamId",
@@ -30,9 +39,33 @@ pub enum Relation {
     Teams,
 }
 
+impl Related<super::judge_feature_assignment::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::JudgeFeatureAssignment.def()
+    }
+}
+
 impl Related<super::prize_track_entry::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::PrizeTrackEntry.def()
+    }
+}
+
+impl Related<super::project_feature_score::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ProjectFeatureScore.def()
+    }
+}
+
+impl Related<super::project_visit::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ProjectVisit.def()
+    }
+}
+
+impl Related<super::submission_ai_summary::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::SubmissionAiSummary.def()
     }
 }
 

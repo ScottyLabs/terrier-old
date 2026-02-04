@@ -106,7 +106,7 @@ impl<'a> HackathonRepository<'a> {
 
         // Fetch user's check-ins for these events
         let checkins = crate::entities::event_checkins::Entity::find()
-            .filter(crate::entities::event_checkins::Column::EventId.is_in(event_ids))
+            .filter(crate::entities::event_checkins::Column::EventId.is_in(event_ids.clone()))
             .filter(crate::entities::event_checkins::Column::UserId.eq(user_id))
             .all(self.repo.db())
             .await
@@ -126,12 +126,36 @@ impl<'a> HackathonRepository<'a> {
                 .push(org.user_id);
         }
 
-        // Map events with their organizers and check-in status
+        // Fetch required prizes for these events
+        let required_prizes = crate::entities::prize_required_events::Entity::find()
+            .filter(
+                crate::entities::prize_required_events::Column::EventId.is_in(event_ids.clone()),
+            )
+            .find_also_related(crate::entities::prize::Entity)
+            .all(self.repo.db())
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch required prizes: {}", e)))?;
+
+        // Group required prizes by event_id
+        let mut required_prizes_map: std::collections::HashMap<i32, Vec<String>> =
+            std::collections::HashMap::new();
+        for (req, prize) in required_prizes {
+            if let Some(p) = prize {
+                required_prizes_map
+                    .entry(req.event_id)
+                    .or_default()
+                    .push(p.name);
+            }
+        }
+
+        // Map events with their organizers, check-in status, and required prizes
         Ok(events
             .into_iter()
             .map(|e| {
                 let org_ids = organizer_map.get(&e.id).cloned().unwrap_or_default();
                 let is_checked_in = checked_in_event_ids.contains(&e.id);
+                let required_for_prizes =
+                    required_prizes_map.get(&e.id).cloned().unwrap_or_default();
                 crate::domain::hackathons::types::ScheduleEvent {
                     id: e.id,
                     name: e.name,
@@ -146,6 +170,7 @@ impl<'a> HackathonRepository<'a> {
                     points: e.points,
                     checkin_type: e.checkin_type,
                     is_checked_in,
+                    required_for_prizes,
                 }
             })
             .collect())
@@ -173,6 +198,12 @@ impl From<hackathons::Model> for HackathonInfo {
             app_icon_url: h.app_icon_url,
             theme_color: h.theme_color,
             background_color: h.background_color,
+            submissions_closed: h.submissions_closed,
+            judging_started: h.judging_started,
+            judge_session_timeout_minutes: h.judge_session_timeout_minutes,
+            proximity_routing_enabled: h.proximity_routing_enabled,
+            room_width: h.room_width,
+            judging_timer_seconds: h.judging_timer_seconds,
         }
     }
 }

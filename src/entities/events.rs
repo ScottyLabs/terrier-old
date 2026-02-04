@@ -40,6 +40,8 @@ pub enum Relation {
         on_delete = "NoAction"
     )]
     Hackathons,
+    #[sea_orm(has_many = "super::prize_required_events::Entity")]
+    PrizeRequiredEvents,
 }
 
 impl Related<super::event_checkins::Entity> for Entity {
@@ -57,6 +59,21 @@ impl Related<super::event_organizers::Entity> for Entity {
 impl Related<super::hackathons::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Hackathons.def()
+    }
+}
+
+impl Related<super::prize_required_events::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PrizeRequiredEvents.def()
+    }
+}
+
+impl Related<super::prize::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::prize_required_events::Relation::Prize.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::prize_required_events::Relation::Events.def().rev())
     }
 }
 

@@ -8,6 +8,8 @@
 	<array>
 		<string>applinks:terrier.scottylabs.org</string>
 		<string>webcredentials:terrier.scottylabs.org</string>
+        <string>applinks:terrier-staging.scottylabs.org?mode=developer</string>
+        <string>webcredentials:terrier-staging.scottylabs.org?mode=developer</string>
 	</array>
 </dict>
 </plist>

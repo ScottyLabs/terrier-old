@@ -524,7 +524,7 @@ pub fn EventModal(
 
                         // Dropdown
                         if show_organizer_dropdown() && !filtered_organizers.is_empty() {
-                            div { class: "absolute left-0 right-0 top-full mt-1 bg-white border border-stroke-neutral-1 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10",
+                            div { class: "absolute left-0 right-0 top-full mt-1 bg-background-neutral-primary border border-stroke-neutral-1 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10",
                                 for person in filtered_organizers.iter() {
                                     button {
                                         key: "{person.user_id}",
@@ -544,7 +544,7 @@ pub fn EventModal(
                                                 show_organizer_dropdown.set(false);
                                             }
                                         },
-                                        div { class: "w-6 h-6 rounded-full bg-gray-300" }
+                                        div { class: "w-6 h-6 rounded-full bg-background-neutral-tertiary" }
                                         span { class: "text-sm",
                                             "{person.name.clone().unwrap_or_else(|| person.email.clone())}"
                                         }
@@ -603,7 +603,7 @@ pub fn EventModal(
                         }
                         div { class: "flex gap-2",
                             button {
-                                class: "px-4 py-2 text-sm border border-stroke-neutral-1 rounded-full hover:bg-gray-100",
+                                class: "px-4 py-2 text-sm border border-stroke-neutral-1 rounded-full hover:bg-background-neutral-secondary-hover",
                                 onclick: move |_| show_delete_confirm.set(false),
                                 "Cancel"
                             }

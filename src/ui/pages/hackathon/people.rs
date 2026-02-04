@@ -1,16 +1,25 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::{
     Icon,
-    icons::ld_icons::{LdChevronDown, LdLink, LdSearch},
+    icons::ld_icons::{LdChevronDown, LdSearch},
 };
+use std::collections::HashSet;
 
 use crate::{
     auth::{HackathonRole, HackathonRoleType, PEOPLE_ROLES, hooks::use_require_access_or_redirect},
-    domain::people::handlers::{HackathonPerson, get_hackathon_people, remove_hackathon_person},
+    domain::people::handlers::{
+        HackathonPerson, UpdateRoleRequest, get_hackathon_people,
+        mass_update::{
+            MassAddPrizeTrackRequest, MassUpdateRoleRequest, mass_add_to_prize_track,
+            mass_update_role,
+        },
+        remove_hackathon_person, update_person_role,
+    },
+    domain::prizes::handlers::{PrizeInfo, get_prizes},
     ui::{
-        features::people::{PeopleModal, PersonCard},
+        features::people::PeopleModal,
         foundation::components::{
-            ButtonSize, ButtonWithIcon, Dropdown, DropdownOption, TabSwitcher,
+            Button, ButtonSize, ButtonVariant, Dropdown, DropdownOption, TabSwitcher,
         },
     },
 };
@@ -21,6 +30,15 @@ enum PeopleTab {
     Teams,
 }
 
+/// Available roles for users
+const AVAILABLE_ROLES: [(&str, &str); 5] = [
+    ("participant", "Participant"),
+    ("judge", "Judge"),
+    ("sponsor", "Sponsor"),
+    ("organizer", "Organizer"),
+    ("admin", "Admin"),
+];
+
 #[component]
 pub fn HackathonPeople(slug: String) -> Element {
     if let Some(no_access) = use_require_access_or_redirect(PEOPLE_ROLES) {
@@ -28,6 +46,7 @@ pub fn HackathonPeople(slug: String) -> Element {
     }
 
     let slug_for_remove = slug.clone();
+    let slug_for_role_update = slug.clone();
 
     let mut filter_open = use_signal(|| false);
     let mut selected_filters = use_signal(Vec::new);
@@ -35,6 +54,13 @@ pub fn HackathonPeople(slug: String) -> Element {
     let mut search_query = use_signal(String::new);
     let mut selected_person = use_signal(|| None::<HackathonPerson>);
     let mut show_modal = use_signal(|| false);
+    let mut updating_role: Signal<Option<i32>> = use_signal(|| None); // Track which user's role is being updated
+
+    // Mass Update State
+    let mut selected_user_ids = use_signal(HashSet::<i32>::new);
+    let mut is_bulk_action_modal_open = use_signal(|| false);
+    let mut bulk_action_type = use_signal(|| "role".to_string()); // "role" or "prize_track"
+    let mut bulk_action_value = use_signal(|| String::new());
 
     // Get user's role from context
     let user_role = use_context::<Option<HackathonRole>>();
@@ -45,13 +71,18 @@ pub fn HackathonPeople(slug: String) -> Element {
         .unwrap_or(false);
 
     // Fetch hackathon people
-    let mut people_resource = use_resource(move || {
-        let slug = slug.clone();
-        async move {
-            let result: Result<Vec<HackathonPerson>, _> = get_hackathon_people(slug).await;
-            result.ok()
+    let mut people_resource = use_resource(use_reactive(&slug, |slug| async move {
+        get_hackathon_people(slug).await
+    }));
+
+    // Fetch prizes for bulk add (only needed if admin)
+    let prizes_resource = use_resource(use_reactive(&slug, move |slug| async move {
+        if is_admin {
+            get_prizes(slug).await
+        } else {
+            Ok(Vec::new())
         }
-    });
+    }));
 
     // Filter options for different roles
     let filter_options = vec![
@@ -88,42 +119,131 @@ pub fn HackathonPeople(slug: String) -> Element {
     ];
 
     let search_placeholder = match active_tab() {
-        PeopleTab::Individuals => "Search individuals",
+        PeopleTab::Individuals => "Search individuals (comma separated)",
         PeopleTab::Teams => "Search teams",
     };
 
     let show_filter = matches!(active_tab(), PeopleTab::Individuals);
 
     // Filter people based on search and role filters
-    let filtered_people = people_resource.read().as_ref().and_then(|people| {
-        people.as_ref().map(|people_list| {
-            people_list
-                .iter()
-                .filter(|person| {
-                    // Search filter
-                    let query = search_query().to_lowercase();
-                    let matches_search = query.is_empty()
-                        || person
+    let filtered_people = use_memo(move || {
+        let people = match people_resource.read().as_ref() {
+            Some(Ok(p)) => p.clone(),
+            _ => return Vec::new(),
+        };
+
+        // Parse search query
+        let query_str = search_query().to_lowercase();
+        let query_terms: Vec<String> = query_str
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        people
+            .into_iter()
+            .filter(|person| {
+                // Search filter (OR logic)
+                let matches_search = if query_terms.is_empty() {
+                    true
+                } else {
+                    query_terms.iter().any(|term| {
+                        person
                             .name
                             .as_ref()
-                            .map(|name| name.to_lowercase().contains(&query))
+                            .map(|n| n.to_lowercase().contains(term))
                             .unwrap_or(false)
-                        || person.email.to_lowercase().contains(&query);
+                            || person.email.to_lowercase().contains(term)
+                            || person.role.to_lowercase().contains(term)
+                    })
+                };
 
-                    // Role filter
-                    let filters = selected_filters();
-                    let matches_role_filter =
-                        filters.is_empty() || filters.contains(&person.role.to_lowercase());
+                // Role filter
+                let filters = selected_filters();
+                let matches_role_filter =
+                    filters.is_empty() || filters.contains(&person.role.to_lowercase());
 
-                    matches_search && matches_role_filter
-                })
-                .cloned()
-                .collect::<Vec<_>>()
-        })
+                matches_search && matches_role_filter
+            })
+            .collect::<Vec<_>>()
     });
 
+    // Bulk Action Logic
+    let toggle_all = move |_| {
+        let current_filtered = filtered_people();
+        let all_ids: HashSet<i32> = current_filtered.iter().map(|p| p.user_id).collect();
+        let mut selected = selected_user_ids.write();
+
+        // If all currently filtered are selected, deselect them. Otherwise, select them.
+        let all_selected = all_ids.iter().all(|id| selected.contains(id));
+
+        if all_selected {
+            for id in all_ids {
+                selected.remove(&id);
+            }
+        } else {
+            for id in all_ids {
+                selected.insert(id);
+            }
+        }
+    };
+
+    let get_target_users = move || {
+        let selected = selected_user_ids();
+        if !selected.is_empty() {
+            selected.into_iter().collect::<Vec<i32>>()
+        } else {
+            // If none selected, apply to all filtered
+            filtered_people().iter().map(|p| p.user_id).collect()
+        }
+    };
+
+    let confirm_bulk_action = move |_| {
+        let slug = slug.clone();
+        async move {
+            if !is_admin {
+                return;
+            }
+
+            let target_users = get_target_users();
+            if target_users.is_empty() {
+                return;
+            }
+
+            let action = bulk_action_type();
+            let value = bulk_action_value();
+
+            if action == "role" {
+                let req = MassUpdateRoleRequest {
+                    user_ids: target_users,
+                    role: value,
+                };
+                let _ = mass_update_role(slug, req).await;
+            } else if action == "prize_track" {
+                if let Ok(prize_id) = value.parse::<i32>() {
+                    let req = MassAddPrizeTrackRequest {
+                        user_ids: target_users,
+                        prize_track_id: prize_id,
+                    };
+                    let _ = mass_add_to_prize_track(slug, req).await;
+                }
+            }
+
+            is_bulk_action_modal_open.set(false);
+            people_resource.restart();
+            selected_user_ids.write().clear();
+        }
+    };
+
+    let target_count = if selected_user_ids().is_empty() {
+        filtered_people().len()
+    } else {
+        selected_user_ids().len()
+    };
+    let bulk_button_text = format!("Apply to {} Users", target_count);
+
     rsx! {
-        div { class: "flex flex-col h-full",
+        div { class: "flex flex-col h-full relative",
             h1 { class: "text-[30px] font-semibold leading-[38px] text-foreground-neutral-primary pt-11 pb-7",
                 "People"
             }
@@ -181,39 +301,137 @@ pub fn HackathonPeople(slug: String) -> Element {
                         }
                     }
 
-                    ButtonWithIcon::<LdLink> { icon: LdLink, size: ButtonSize::Compact, "Create Account Link" }
+                    if is_admin && show_filter {
+                        Button {
+                            size: ButtonSize::Compact,
+                            onclick: move |_| is_bulk_action_modal_open.set(true),
+                            "{bulk_button_text}"
+                        }
+                    }
                 }
 
                 // People list
                 div { class: "bg-background-neutral-primary rounded-[20px] p-7 flex flex-col overflow-y-auto flex-1",
-                    match filtered_people {
-                        Some(people) => rsx! {
-                            if people.is_empty() {
-                                div { class: "flex items-center justify-center h-full",
-                                    p { class: "text-foreground-neutral-secondary", "No people found" }
+
+                    // Header Row for Select All (Admin only)
+                    if is_admin && show_filter && !filtered_people().is_empty() {
+                        div { class: "flex items-center gap-4 py-2 border-b border-stroke-neutral-1 mb-2",
+                            input {
+                                r#type: "checkbox",
+                                class: "w-4 h-4 rounded border-gray-300",
+                                onchange: toggle_all,
+                                checked: {
+                                    let all_ids: HashSet<i32> = filtered_people()
+                                        .iter()
+                                        .map(|p| p.user_id)
+                                        .collect();
+                                    !all_ids.is_empty() && all_ids.iter().all(|id| selected_user_ids().contains(id))
+                                },
+                            }
+                            span { class: "text-sm font-semibold text-foreground-neutral-secondary",
+                                "Select All Filtered"
+                            }
+                        }
+                    }
+
+                    if filtered_people().is_empty() {
+                        div { class: "flex items-center justify-center h-full",
+                            p { class: "text-foreground-neutral-secondary", "No people found" }
+                        }
+                    } else {
+                        for person in filtered_people() {
+                            // Custom person row with role dropdown
+                            div {
+                                key: "{person.user_id}",
+                                class: "flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-stroke-neutral-1 gap-3",
+
+                                div { class: "flex items-center gap-4 flex-1",
+                                    if is_admin && show_filter {
+                                        input {
+                                            r#type: "checkbox",
+                                            class: "w-4 h-4 rounded border-gray-300",
+                                            checked: selected_user_ids().contains(&person.user_id),
+                                            onchange: move |_| {
+                                                let mut ids = selected_user_ids.write();
+                                                let id = person.user_id;
+                                                if ids.contains(&id) {
+                                                    ids.remove(&id);
+                                                } else {
+                                                    ids.insert(id);
+                                                }
+                                            },
+                                        }
+                                    }
+
+                                    // Left side: Name and email
+                                    div { class: "flex flex-col min-w-0 flex-1",
+                                        p { class: "text-base font-medium leading-6 text-foreground-neutral-primary truncate",
+                                            "{person.name.clone().unwrap_or_else(|| \"Unknown\".to_string())}"
+                                        }
+                                        p { class: "text-sm text-foreground-neutral-secondary truncate",
+                                            "{person.email}"
+                                        }
+                                    }
                                 }
-                            } else {
-                                for person in people {
-                                    PersonCard {
-                                        key: "{person.user_id}",
-                                        name: person.name.clone().unwrap_or_else(|| "Unknown".to_string()),
-                                        role: format_role(&person.role),
-                                        on_view: {
-                                            let person = person.clone();
-                                            move |_| {
-                                                selected_person.set(Some(person.clone()));
-                                                show_modal.set(true);
+
+                                // Right side: Role selector and View button
+                                div { class: "flex items-center gap-3 flex-shrink-0",
+                                    // Role dropdown (only for admins)
+                                    if is_admin {
+                                        {
+                                            let person_id = person.user_id;
+                                            let current_role = person.role.clone();
+                                            let slug = slug_for_role_update.clone();
+                                            let is_updating = updating_role().map(|id| id == person_id).unwrap_or(false);
+
+                                            rsx! {
+                                                select {
+                                                    class: "px-3 py-1.5 text-sm font-medium rounded-lg border border-stroke-neutral-1 bg-background-neutral-primary text-foreground-neutral-primary cursor-pointer",
+                                                    disabled: is_updating,
+                                                    value: "{current_role}",
+                                                    onchange: move |evt| {
+                                                        let new_role = evt.value();
+                                                        let slug = slug.clone();
+                                                        spawn(async move {
+                                                            updating_role.set(Some(person_id));
+                                                            let request = UpdateRoleRequest {
+                                                                role: new_role,
+                                                            };
+                                                            let _ = update_person_role(slug, person_id, request).await;
+                                                            people_resource.restart();
+                                                            updating_role.set(None);
+                                                        });
+                                                    },
+                                                    for (value , label) in AVAILABLE_ROLES.iter() {
+                                                        option { value: *value, selected: current_role.to_lowercase() == *value, "{label}" }
+                                                    }
+                                                }
                                             }
-                                        },
+                                        }
+                                    } else {
+                                        // Just show role badge for non-admins
+                                        span { class: "px-3 py-1 text-xs font-semibold leading-4 rounded-full bg-background-neutral-secondary-enabled text-foreground-neutral-primary",
+                                            "{format_role(&person.role)}"
+                                        }
+                                    }
+
+                                    // View button
+                                    {
+                                        let person = person.clone();
+                                        rsx! {
+                                            button {
+                                                class: "px-4 py-1.5 text-sm font-semibold rounded-full bg-foreground-neutral-primary text-white cursor-pointer",
+                                                onclick: move |_| {
+                                                    selected_person.set(Some(person.clone()));
+                                                    show_modal.set(true);
+                                                },
+                                                "View"
+                                            }
+                                        }
                                     }
                                 }
                             }
-                        },
-                        None => rsx! {
-                            div { class: "flex items-center justify-center h-full",
-                                p { class: "text-foreground-neutral-secondary", "Loading people..." }
-                            }
-                        },
+                        }
                     }
                 }
             }
@@ -227,11 +445,11 @@ pub fn HackathonPeople(slug: String) -> Element {
                     user_email: person.email.clone(),
                     role: format_role(&person.role),
                     display_name: person.name.clone(),
-                    portfolio: None, // TODO: Add to HackathonPerson struct
-                    major: None, // TODO: Add to HackathonPerson struct
-                    graduation_year: None, // TODO: Add to HackathonPerson struct
-                    dietary_restrictions: None, // TODO: Add to HackathonPerson struct
-                    shirt_size: None, // TODO: Add to HackathonPerson struct
+                    portfolio: None,
+                    major: None,
+                    graduation_year: None,
+                    dietary_restrictions: None,
+                    shirt_size: None,
                     is_admin,
                     on_close: move |_| {
                         show_modal.set(false);
@@ -251,6 +469,71 @@ pub fn HackathonPeople(slug: String) -> Element {
                         }
                     },
                     on_send_message: move |_| {},
+                }
+            }
+        }
+
+        // Bulk Action Modal
+        if is_bulk_action_modal_open() {
+            div { class: "fixed inset-0 bg-black/50 flex items-center justify-center z-50",
+                div { class: "bg-white rounded-[20px] p-6 w-[400px] flex flex-col gap-4 shadow-xl",
+                    h2 { class: "text-xl font-bold", "Bulk Actions" }
+                    p { "Applying to {target_count} users." }
+
+                    div { class: "flex flex-col gap-2",
+                        label { class: "text-sm font-medium", "Action Type" }
+                        select {
+                            class: "border rounded p-2",
+                            onchange: move |evt| bulk_action_type.set(evt.value()),
+                            value: "{bulk_action_type}",
+                            option { value: "role", "Change Role" }
+                            option { value: "prize_track", "Add to Prize Track" }
+                        }
+                    }
+
+                    if bulk_action_type() == "role" {
+                        div { class: "flex flex-col gap-2",
+                            label { class: "text-sm font-medium", "Select Role" }
+                            select {
+                                class: "border rounded p-2",
+                                onchange: move |evt| bulk_action_value.set(evt.value()),
+                                value: "{bulk_action_value}",
+                                option { value: "", "Select a role..." }
+                                option { value: "participant", "Participant" }
+                                option { value: "judge", "Judge" }
+                                option { value: "sponsor", "Sponsor" }
+                                option { value: "organizer", "Organizer" }
+                            }
+                        }
+                    } else if bulk_action_type() == "prize_track" {
+                        div { class: "flex flex-col gap-2",
+                            label { class: "text-sm font-medium", "Select Prize Track" }
+                            select {
+                                class: "border rounded p-2",
+                                onchange: move |evt| bulk_action_value.set(evt.value()),
+                                value: "{bulk_action_value}",
+                                option { value: "", "Select a prize track..." }
+                                if let Some(Ok(prizes)) = prizes_resource.read().as_ref() {
+                                    for prize in prizes {
+                                        option { value: "{prize.id}", "{prize.name}" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    div { class: "flex justify-end gap-2 mt-4",
+                        Button {
+                            variant: ButtonVariant::Secondary,
+                            onclick: move |_| is_bulk_action_modal_open.set(false),
+                            "Cancel"
+                        }
+                        Button {
+                            variant: ButtonVariant::Success,
+                            onclick: confirm_bulk_action,
+                            "Confirm"
+                        }
+                    }
                 }
             }
         }

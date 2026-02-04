@@ -326,7 +326,7 @@ pub fn HackathonScheduleEdit(slug: String, event_id: i32) -> Element {
             // Header with back button
             div { class: "flex-shrink-0 p-4 flex items-center justify-between",
                 button {
-                    class: "p-2 -ml-2 hover:bg-gray-100 rounded-full transition-colors",
+                    class: "p-2 -ml-2 hover:bg-background-neutral-secondary-hover rounded-full transition-colors",
                     onclick: move |_| {
                         nav.push(Route::HackathonScheduleEvent {
                             slug: slug_for_nav.clone(),
@@ -477,7 +477,7 @@ pub fn HackathonScheduleEdit(slug: String, event_id: i32) -> Element {
 
                             // Dropdown
                             if show_organizer_dropdown() && !filtered_organizers.is_empty() {
-                                div { class: "absolute left-0 right-0 top-full mt-1 bg-white border border-stroke-neutral-1 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10",
+                                div { class: "absolute left-0 right-0 top-full mt-1 bg-background-neutral-primary border border-stroke-neutral-1 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10",
                                     for person in filtered_organizers.iter() {
                                         button {
                                             key: "{person.user_id}",
@@ -497,7 +497,7 @@ pub fn HackathonScheduleEdit(slug: String, event_id: i32) -> Element {
                                                     show_organizer_dropdown.set(false);
                                                 }
                                             },
-                                            div { class: "w-6 h-6 rounded-full bg-gray-300" }
+                                            div { class: "w-6 h-6 rounded-full bg-background-neutral-tertiary" }
                                             span { class: "text-sm",
                                                 "{person.name.clone().unwrap_or_else(|| person.email.clone())}"
                                             }
@@ -559,7 +559,7 @@ pub fn HackathonScheduleEdit(slug: String, event_id: i32) -> Element {
                                 }
                             }
                             button {
-                                class: "flex-1 py-3 bg-gray-200 text-foreground-neutral-primary font-medium rounded-full",
+                                class: "flex-1 py-3 bg-background-neutral-tertiary text-foreground-neutral-primary font-medium rounded-full",
                                 onclick: move |_| show_delete_confirm.set(false),
                                 "Cancel"
                             }

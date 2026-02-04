@@ -9,6 +9,26 @@ use crate::core::auth::{
 #[cfg(feature = "server")]
 use utoipa::ToSchema;
 
+/// Feature weight info for a prize
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "server", derive(ToSchema))]
+pub struct PrizeFeatureWeightInfo {
+    pub feature_id: i32,
+    pub weight: f32,
+}
+
+/// Request payload for updating a prize
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "server", derive(ToSchema))]
+pub struct UpdatePrizeRequest {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub image_url: Option<String>,
+    pub category: Option<String>,
+    pub value: Option<String>,
+    pub required_event_ids: Option<Vec<i32>>,
+}
+
 /// Prize info returned from handlers
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "server", derive(ToSchema))]
@@ -19,6 +39,8 @@ pub struct PrizeInfo {
     pub image_url: Option<String>,
     pub category: Option<String>,
     pub value: String,
+    pub feature_weights: Vec<PrizeFeatureWeightInfo>,
+    pub required_event_ids: Vec<i32>,
 }
 
 /// Request payload for creating a prize
@@ -30,6 +52,14 @@ pub struct CreatePrizeRequest {
     pub image_url: Option<String>,
     pub category: Option<String>,
     pub value: String,
+    pub required_event_ids: Vec<i32>,
+}
+
+/// Request payload for updating prize feature weights
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "server", derive(ToSchema))]
+pub struct UpdatePrizeFeatureWeightsRequest {
+    pub weights: Vec<PrizeFeatureWeightInfo>,
 }
 
 /// Get all prizes
@@ -49,8 +79,8 @@ pub struct CreatePrizeRequest {
 ))]
 #[get("/api/hackathons/:slug/prizes", user: SyncedUser)]
 pub async fn get_prizes(slug: String) -> Result<Vec<PrizeInfo>, ServerFnError> {
-    use crate::entities::prize;
-    use sea_orm::EntityTrait;
+    use crate::entities::{prize, prize_feature_weight, prize_required_events};
+    use sea_orm::{ColumnTrait, EntityTrait, ModelTrait, QueryFilter};
 
     let ctx = RequestContext::extract(&user)
         .await?
@@ -63,17 +93,56 @@ pub async fn get_prizes(slug: String) -> Result<Vec<PrizeInfo>, ServerFnError> {
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to fetch prizes: {}", e)))?;
 
-    Ok(prizes
-        .into_iter()
-        .map(|p| PrizeInfo {
+    let mut result = Vec::new();
+
+    // Fetch all required events for these prizes in one go ideally, but loop is fine for now
+    // Or use efficient loading
+    let prize_ids: Vec<i32> = prizes.iter().map(|p| p.id).collect();
+    let all_requirements = prize_required_events::Entity::find()
+        .filter(prize_required_events::Column::PrizeId.is_in(prize_ids))
+        .all(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch requirements: {}", e)))?;
+
+    // Group by prize_id
+    use std::collections::HashMap;
+    let mut requirements_map: HashMap<i32, Vec<i32>> = HashMap::new();
+    for req in all_requirements {
+        requirements_map
+            .entry(req.prize_id)
+            .or_default()
+            .push(req.event_id);
+    }
+
+    for p in prizes {
+        // Fetch feature weights for this prize
+        let weights = prize_feature_weight::Entity::find()
+            .filter(prize_feature_weight::Column::PrizeId.eq(p.id))
+            .all(&ctx.state.db)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch weights: {}", e)))?;
+
+        let required_event_ids = requirements_map.remove(&p.id).unwrap_or_default();
+
+        result.push(PrizeInfo {
             id: p.id,
             name: p.name,
             description: p.description,
             image_url: p.image_url,
             category: p.category,
             value: p.value,
-        })
-        .collect())
+            feature_weights: weights
+                .into_iter()
+                .map(|w| PrizeFeatureWeightInfo {
+                    feature_id: w.feature_id,
+                    weight: w.weight,
+                })
+                .collect(),
+            required_event_ids,
+        });
+    }
+
+    Ok(result)
 }
 
 /// Create a new prize (admin/organizer only)
@@ -100,7 +169,7 @@ pub async fn create_prize(
 ) -> Result<PrizeInfo, ServerFnError> {
     use crate::domain::people::repository::UserRoleRepository;
     use crate::entities::prize;
-    use sea_orm::{ActiveModelTrait, Set};
+    use sea_orm::{ActiveModelTrait, Set, TransactionTrait};
 
     let ctx = RequestContext::extract(&user)
         .await?
@@ -125,20 +194,61 @@ pub async fn create_prize(
         ));
     }
 
-    // Create the prize
+    // Start transaction
+    let txn = ctx
+        .state
+        .db
+        .begin()
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to start transaction: {}", e)))?;
+
+    // Create the prize with hackathon_id
     let prize_model = prize::ActiveModel {
         name: Set(request.name.clone()),
         description: Set(request.description.clone()),
         image_url: Set(request.image_url.clone()),
         category: Set(request.category.clone()),
         value: Set(request.value.clone()),
+        hackathon_id: Set(Some(hackathon.id)),
         ..Default::default()
     };
 
     let inserted = prize_model
-        .insert(&ctx.state.db)
+        .insert(&txn)
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to create prize: {}", e)))?;
+
+    // Insert required events
+    for event_id in request.required_event_ids.iter() {
+        use crate::entities::{events, prize_required_events};
+        use sea_orm::EntityTrait;
+
+        // Verify event belongs to this hackathon
+        let event = events::Entity::find_by_id(*event_id)
+            .one(&txn)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch event: {}", e)))?
+            .ok_or_else(|| ServerFnError::new(format!("Event {} not found", event_id)))?;
+
+        if event.hackathon_id != hackathon.id {
+            return Err(ServerFnError::new(format!(
+                "Event {} does not belong to this hackathon",
+                event_id
+            )));
+        }
+
+        let req = prize_required_events::ActiveModel {
+            prize_id: Set(inserted.id),
+            event_id: Set(*event_id),
+        };
+        req.insert(&txn)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to add required event: {}", e)))?;
+    }
+
+    txn.commit()
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to commit transaction: {}", e)))?;
 
     Ok(PrizeInfo {
         id: inserted.id,
@@ -147,6 +257,181 @@ pub async fn create_prize(
         image_url: inserted.image_url,
         category: inserted.category,
         value: inserted.value,
+        feature_weights: Vec::new(),
+        required_event_ids: request.required_event_ids,
+    })
+}
+
+/// Update a prize (admin/organizer only)
+#[cfg_attr(feature = "server", utoipa::path(
+    put,
+    path = "/api/hackathons/{slug}/prizes/{id}",
+    params(
+        ("slug" = String, Path, description = "Hackathon slug"),
+        ("id" = i32, Path, description = "Prize ID")
+    ),
+    request_body = UpdatePrizeRequest,
+    responses(
+        (status = 200, description = "Prize updated successfully", body = PrizeInfo),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - admin/organizer only"),
+        (status = 404, description = "Prize not found"),
+        (status = 500, description = "Server error")
+    ),
+    tag = "prizes"
+))]
+#[put("/api/hackathons/:slug/prizes/:id", user: SyncedUser)]
+pub async fn update_prize(
+    slug: String,
+    id: i32,
+    request: UpdatePrizeRequest,
+) -> Result<PrizeInfo, ServerFnError> {
+    use crate::domain::people::repository::UserRoleRepository;
+    use crate::entities::{prize, prize_feature_weight, prize_required_events};
+    use sea_orm::{
+        ActiveModelTrait, ColumnTrait, EntityTrait, ModelTrait, QueryFilter, Set, TransactionTrait,
+    };
+
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
+
+    let hackathon = ctx.hackathon()?;
+
+    // Check permissions
+    let is_global_admin = Permissions::is_global_admin(&ctx);
+    let role_repo = UserRoleRepository::new(&ctx.state.db);
+    let user_role = role_repo.find_user_role(ctx.user.id, hackathon.id).await?;
+
+    let is_admin_or_organizer = user_role
+        .as_ref()
+        .map(|r| r.role == "admin" || r.role == "organizer")
+        .unwrap_or(false);
+
+    if !is_global_admin && !is_admin_or_organizer {
+        return Err(ServerFnError::new(
+            "Only admins and organizers can update prizes",
+        ));
+    }
+
+    // Find the prize
+    // Find the prize
+    let prize_model = prize::Entity::find_by_id(id)
+        .filter(prize::Column::HackathonId.eq(hackathon.id))
+        .one(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to find prize: {}", e)))?
+        .ok_or_else(|| ServerFnError::new("Prize not found in this hackathon"))?;
+
+    // Start transaction
+    let txn = ctx
+        .state
+        .db
+        .begin()
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to start transaction: {}", e)))?;
+
+    // Update basic fields
+    let mut active: prize::ActiveModel = prize_model.clone().into();
+    if let Some(name) = request.name {
+        active.name = Set(name);
+    }
+    if let Some(desc) = request.description {
+        active.description = Set(Some(desc));
+    }
+    if let Some(url) = request.image_url {
+        active.image_url = Set(Some(url));
+    }
+    if let Some(cat) = request.category {
+        active.category = Set(Some(cat));
+    }
+    if let Some(val) = request.value {
+        active.value = Set(val);
+    }
+
+    let updated = active
+        .update(&txn)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to update prize: {}", e)))?;
+
+    // Update required events if provided
+    let mut required_event_ids = Vec::new();
+    if let Some(req_ids) = request.required_event_ids {
+        use crate::entities::events;
+        use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
+
+        // Validate that all event IDs belong to this hackathon
+        if !req_ids.is_empty() {
+            let count = events::Entity::find()
+                .filter(events::Column::Id.is_in(req_ids.clone()))
+                .filter(events::Column::HackathonId.eq(hackathon.id))
+                .count(&txn)
+                .await
+                .map_err(|e| ServerFnError::new(format!("Failed to validate events: {}", e)))?;
+
+            let unique_ids: std::collections::HashSet<_> = req_ids.iter().collect();
+            if count as usize != unique_ids.len() {
+                return Err(ServerFnError::new(
+                    "One or more event IDs are invalid or belong to another hackathon",
+                ));
+            }
+        }
+
+        // Delete existing requirements
+        prize_required_events::Entity::delete_many()
+            .filter(prize_required_events::Column::PrizeId.eq(id))
+            .exec(&txn)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to clear requirements: {}", e)))?;
+
+        // Insert new requirements
+        for event_id in &req_ids {
+            let req = prize_required_events::ActiveModel {
+                prize_id: Set(id),
+                event_id: Set(*event_id),
+            };
+            req.insert(&txn)
+                .await
+                .map_err(|e| ServerFnError::new(format!("Failed to add requirement: {}", e)))?;
+        }
+        required_event_ids = req_ids;
+    } else {
+        // Fetch existing if not updated
+        let reqs = prize_required_events::Entity::find()
+            .filter(prize_required_events::Column::PrizeId.eq(id))
+            .all(&txn)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch requirements: {}", e)))?;
+        required_event_ids = reqs.iter().map(|r| r.event_id).collect();
+    }
+
+    txn.commit()
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to commit transaction: {}", e)))?;
+
+    // Fetch weights for response
+    let weights = prize_feature_weight::Entity::find()
+        .filter(prize_feature_weight::Column::PrizeId.eq(id))
+        .all(&ctx.state.db)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to fetch weights: {}", e)))?;
+
+    Ok(PrizeInfo {
+        id: updated.id,
+        name: updated.name,
+        description: updated.description,
+        image_url: updated.image_url,
+        category: updated.category,
+        value: updated.value,
+        feature_weights: weights
+            .into_iter()
+            .map(|w| PrizeFeatureWeightInfo {
+                feature_id: w.feature_id,
+                weight: w.weight,
+            })
+            .collect(),
+        required_event_ids,
     })
 }
 
@@ -207,6 +492,129 @@ pub async fn delete_prize(slug: String, id: i32) -> Result<(), ServerFnError> {
         .delete(&ctx.state.db)
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to delete prize: {}", e)))?;
+
+    Ok(())
+}
+
+/// Update prize feature weights (admin/organizer only)
+#[cfg_attr(feature = "server", utoipa::path(
+    put,
+    path = "/api/hackathons/{slug}/prizes/{id}/weights",
+    params(
+        ("slug" = String, Path, description = "Hackathon slug"),
+        ("id" = i32, Path, description = "Prize ID")
+    ),
+    request_body = UpdatePrizeFeatureWeightsRequest,
+    responses(
+        (status = 200, description = "Weights updated successfully"),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - admin/organizer only"),
+        (status = 404, description = "Prize not found"),
+        (status = 500, description = "Server error")
+    ),
+    tag = "prizes"
+))]
+#[put("/api/hackathons/:slug/prizes/:id/weights", user: SyncedUser)]
+pub async fn update_prize_feature_weights(
+    slug: String,
+    id: i32,
+    request: UpdatePrizeFeatureWeightsRequest,
+) -> Result<(), ServerFnError> {
+    use crate::domain::people::repository::UserRoleRepository;
+    use crate::entities::prize_feature_weight;
+    use sea_orm::{
+        ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, PaginatorTrait,
+        QueryFilter, Set, TransactionTrait,
+    };
+
+    let ctx = RequestContext::extract(&user)
+        .await?
+        .with_hackathon(&slug)
+        .await?;
+
+    let hackathon = ctx.hackathon()?;
+
+    // Check permissions
+    let is_global_admin = Permissions::is_global_admin(&ctx);
+    let role_repo = UserRoleRepository::new(&ctx.state.db);
+    let user_role = role_repo.find_user_role(ctx.user.id, hackathon.id).await?;
+
+    let is_admin_or_organizer = user_role
+        .as_ref()
+        .map(|r| r.role == "admin" || r.role == "organizer")
+        .unwrap_or(false);
+
+    if !is_global_admin && !is_admin_or_organizer {
+        return Err(ServerFnError::new(
+            "Only admins and organizers can update prize weights",
+        ));
+    }
+
+    // No validation on weight sum - any values including negative are allowed
+
+    // Transaction
+    let txn = ctx
+        .state
+        .db
+        .begin()
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to start transaction: {}", e)))?;
+
+    // Verify prize exists and belongs to this hackathon
+    use crate::entities::{feature, prize};
+    let _prize = prize::Entity::find_by_id(id)
+        .filter(prize::Column::HackathonId.eq(hackathon.id))
+        .one(&txn)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to find prize: {}", e)))?
+        .ok_or_else(|| ServerFnError::new("Prize not found in this hackathon"))?;
+
+    // Validate that all feature IDs belong to this hackathon
+    let feature_ids: Vec<i32> = request.weights.iter().map(|w| w.feature_id).collect();
+    if !feature_ids.is_empty() {
+        let count = feature::Entity::find()
+            .filter(feature::Column::Id.is_in(feature_ids.clone()))
+            .filter(feature::Column::HackathonId.eq(hackathon.id))
+            .count(&txn)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to validate features: {}", e)))?;
+
+        // Check if all requested features were found in this hackathon
+        // Note: this assumes IDs in request are unique; if not, we should check against unique count
+        let unique_ids: std::collections::HashSet<_> = feature_ids.iter().collect();
+        if count as usize != unique_ids.len() {
+            return Err(ServerFnError::new(
+                "One or more feature IDs are invalid or belong to another hackathon",
+            ));
+        }
+    }
+
+    // Delete existing weights
+    prize_feature_weight::Entity::delete_many()
+        .filter(prize_feature_weight::Column::PrizeId.eq(id))
+        .exec(&txn)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to delete existing weights: {}", e)))?;
+
+    // Insert new weights
+    for w in request.weights {
+        let new_weight = prize_feature_weight::ActiveModel {
+            id: NotSet,
+            prize_id: Set(id),
+            feature_id: Set(w.feature_id),
+            weight: Set(w.weight),
+        };
+
+        new_weight
+            .insert(&txn)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to insert weight: {}", e)))?;
+    }
+
+    txn.commit()
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to commit transaction: {}", e)))?;
 
     Ok(())
 }

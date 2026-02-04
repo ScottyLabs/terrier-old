@@ -744,10 +744,10 @@ fn MobileScheduleView(
     }
 
     rsx! {
-        div { class: "min-h-screen bg-gray-100",
+        div { class: "min-h-screen bg-background-neutral-secondary",
             // Schedule title
             div { class: "px-4 pt-6 pb-4",
-                h1 { class: "text-2xl font-bold text-gray-900 mb-5", "Schedule" }
+                h1 { class: "text-2xl font-bold text-foreground-neutral-primary mb-5", "Schedule" }
 
                 // Day tabs
                 div { class: "flex gap-2",
@@ -765,7 +765,7 @@ fn MobileScheduleView(
             div { class: "px-4 pb-8",
                 if grouped.is_empty() {
                     div { class: "text-center py-12",
-                        p { class: "text-gray-500", "No events scheduled for this day" }
+                        p { class: "text-foreground-neutral-tertiary", "No events scheduled for this day" }
                     }
                 } else {
                     for (hour , hour_events) in grouped.iter() {
@@ -777,7 +777,7 @@ fn MobileScheduleView(
                                 div { class: "text-[18px] text-black pt-4", "{format_hour(*hour)}" }
                             }
                             // Separator line + events column
-                            div { class: "flex-1 border-l border-gray-200 pl-4",
+                            div { class: "flex-1 border-l border-stroke-neutral-2 pl-4",
                                 // Events for this hour
                                 div { class: "space-y-3 py-3",
                                     for event in hour_events.iter() {
@@ -803,9 +803,12 @@ fn MobileDayTab(day: NaiveDate, is_selected: bool, on_select: EventHandler<Naive
     let day_num = day.format("%d").to_string();
 
     let (bg_class, text_class) = if is_selected {
-        ("bg-gray-900", "text-white")
+        (
+            "bg-foreground-neutral-primary",
+            "text-background-neutral-primary",
+        )
     } else {
-        ("bg-transparent", "text-gray-900")
+        ("bg-transparent", "text-foreground-neutral-primary")
     };
 
     rsx! {
@@ -829,16 +832,16 @@ fn MobileEventCard(event: ScheduleEvent, slug: String) -> Element {
 
     rsx! {
         button {
-            class: "w-full text-left bg-white rounded-2xl p-4",
+            class: "w-full text-left bg-background-neutral-primary rounded-2xl p-4",
             onclick: move |_| {
                 nav.push(Route::HackathonScheduleEvent {
                     slug: slug_for_nav.clone(),
                     event_id,
                 });
             },
-            h3 { class: "font-semibold text-gray-900 text-base", "{event.name}" }
+            h3 { class: "font-semibold text-foreground-neutral-primary text-base", "{event.name}" }
             if !location_display.is_empty() {
-                p { class: "text-sm text-gray-500 mt-0.5", "{location_display}" }
+                p { class: "text-sm text-foreground-neutral-tertiary mt-0.5", "{location_display}" }
             }
         }
     }

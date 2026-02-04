@@ -2,7 +2,7 @@ use chrono::NaiveDateTime;
 use dioxus::prelude::*;
 use dioxus_free_icons::{
     Icon,
-    icons::ld_icons::{LdClock, LdMapPin, LdTarget, LdX},
+    icons::ld_icons::{LdClock, LdMapPin, LdStar, LdTarget, LdX},
 };
 
 use crate::{
@@ -44,7 +44,11 @@ pub fn EventDetailModal(
                         (*org_id, name.clone(), get_avatar_color(&name).to_string())
                     })
                 } else {
-                    Some((*org_id, "Loading...".to_string(), "bg-gray-400".to_string()))
+                    Some((
+                        *org_id,
+                        "Loading...".to_string(),
+                        "bg-background-neutral-tertiary".to_string(),
+                    ))
                 }
             })
             .collect()
@@ -76,7 +80,7 @@ pub fn EventDetailModal(
                 // Header with close button
                 div { class: "flex justify-end p-4 pb-0",
                     button {
-                        class: "p-2 hover:bg-gray-100 rounded-full transition-colors",
+                        class: "p-2 hover:bg-background-neutral-secondary-hover rounded-full transition-colors",
                         onclick: move |_| on_close.call(()),
                         Icon { width: 20, height: 20, icon: LdX }
                     }
@@ -113,6 +117,28 @@ pub fn EventDetailModal(
                         div { class: "flex items-center gap-2 text-foreground-neutral-secondary mb-4",
                             Icon { width: 16, height: 16, icon: LdTarget }
                             span { class: "text-sm", "{pts} Points" }
+                        }
+                    }
+
+                    // Required for Prizes
+                    if !event.required_for_prizes.is_empty() {
+                         div { class: "mb-6 bg-yellow-50 p-4 rounded-lg border border-yellow-200",
+                            div { class: "flex items-center gap-2 mb-2",
+                                Icon { width: 16, height: 16, icon: LdStar }
+                                h3 { class: "text-sm font-semibold text-yellow-800",
+                                    "Required for Prizes"
+                                }
+                            }
+                            p { class: "text-sm text-yellow-700 mb-2",
+                                "Attendance at this event is required to be eligible for the following prizes:"
+                            }
+                            div { class: "flex flex-wrap gap-2",
+                                for prize_name in event.required_for_prizes.iter() {
+                                    span { class: "px-2 py-1 bg-background-neutral-primary text-yellow-800 text-xs font-medium rounded border border-yellow-200",
+                                        "{prize_name}"
+                                    }
+                                }
+                            }
                         }
                     }
 

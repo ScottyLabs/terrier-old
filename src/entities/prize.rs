@@ -15,17 +15,65 @@ pub struct Model {
     pub image_url: Option<String>,
     pub category: Option<String>,
     pub value: String,
+    pub hackathon_id: Option<i32>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::hackathons::Entity",
+        from = "Column::HackathonId",
+        to = "super::hackathons::Column::Id",
+        on_update = "NoAction",
+        on_delete = "Cascade"
+    )]
+    Hackathons,
+    #[sea_orm(has_many = "super::judge_prize_track::Entity")]
+    JudgePrizeTrack,
+    #[sea_orm(has_many = "super::prize_feature_weight::Entity")]
+    PrizeFeatureWeight,
+    #[sea_orm(has_many = "super::prize_required_events::Entity")]
+    PrizeRequiredEvents,
     #[sea_orm(has_many = "super::prize_track_entry::Entity")]
     PrizeTrackEntry,
+}
+
+impl Related<super::hackathons::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Hackathons.def()
+    }
+}
+
+impl Related<super::judge_prize_track::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::JudgePrizeTrack.def()
+    }
+}
+
+impl Related<super::prize_feature_weight::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PrizeFeatureWeight.def()
+    }
+}
+
+impl Related<super::prize_required_events::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PrizeRequiredEvents.def()
+    }
 }
 
 impl Related<super::prize_track_entry::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::PrizeTrackEntry.def()
+    }
+}
+
+impl Related<super::events::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::prize_required_events::Relation::Events.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::prize_required_events::Relation::Prize.def().rev())
     }
 }
 

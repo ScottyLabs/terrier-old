@@ -38,6 +38,7 @@ pub fn HackathonApply(slug: String) -> Element {
             }
         }
     });
+    dioxus_logger::tracing::info!("Application status: {:#?}", application_status.read());
 
     // Parse form config from hackathon
     let form_schema = use_memo(move || {
@@ -59,6 +60,14 @@ pub fn HackathonApply(slug: String) -> Element {
                         p { class: "text-foreground-neutral-secondary",
                             "Applications are not currently being accepted for this hackathon."
                         }
+                    }
+                } else if role.as_ref().map(|r| r.role == "participant").unwrap_or(false) {
+                    // User has been accepted and is now a participant
+                    ApplicationStatus {
+                        variant: ApplicationStatusVariant::Accepted,
+                        hackathon_slug: slug.clone(),
+                        application_status,
+                        application_refresh_trigger,
                     }
                 } else if let Some(Some(status)) = application_status.read().as_ref() {
                     // User has submitted an application
@@ -757,7 +766,27 @@ fn FormFieldRenderer(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                                 if !value().is_empty() && !is_uploading() {
+
+
+
+
+
 
 
 

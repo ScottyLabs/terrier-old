@@ -24,6 +24,14 @@ pub struct HackathonInfo {
     pub app_icon_url: Option<String>,
     pub theme_color: Option<String>,
     pub background_color: Option<String>,
+    // Judging fields
+    pub submissions_closed: bool,
+    pub judging_started: bool,
+    pub judge_session_timeout_minutes: i32,
+    // Proximity routing and timer config
+    pub proximity_routing_enabled: bool,
+    pub room_width: i32,
+    pub judging_timer_seconds: i32,
 }
 
 /// Event schedule item
@@ -50,4 +58,6 @@ pub struct ScheduleEvent {
     pub checkin_type: String,
     /// Whether the current user has checked in (populated per-request)
     pub is_checked_in: bool,
+    /// Names of prizes that require attendance at this event
+    pub required_for_prizes: Vec<String>,
 }

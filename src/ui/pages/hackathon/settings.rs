@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::NaiveDateTime;
 use dioxus::{logger::tracing, prelude::*};
 use dioxus_forms::*;
 
@@ -189,6 +189,9 @@ pub fn HackathonSettings(slug: String) -> Element {
                                             max_team_size: team_size_val,
                                             start_date: start_date_val,
                                             end_date: end_date_val,
+                                            proximity_routing_enabled: None,
+                                            room_width: None,
+                                            judging_timer_seconds: None,
                                         };
                                         match update_hackathon(slug_clone.clone(), req).await {
                                             Ok(updated_info) => {
@@ -292,6 +295,14 @@ pub fn HackathonSettings(slug: String) -> Element {
                         let max_team_size_for_error = max_team_size_field.clone();
                         let name_field2 = form_fields.name.clone();
                         let desc_field2 = form_fields.description.clone();
+
+                        // Judging config signals
+                        let mut proximity_enabled = use_signal(|| hackathon.read().proximity_routing_enabled);
+                        let mut room_width = use_signal(|| hackathon.read().room_width);
+                        let mut judging_timer = use_signal(|| hackathon.read().judging_timer_seconds);
+                        let proximity_enabled_save = proximity_enabled.clone();
+                        let room_width_save = room_width.clone();
+                        let judging_timer_save = judging_timer.clone();
                         rsx! {
                             form {
                                 class: "flex flex-col gap-5",
@@ -326,6 +337,9 @@ pub fn HackathonSettings(slug: String) -> Element {
                                             max_team_size: team_size_val,
                                             start_date: start_date_val,
                                             end_date: end_date_val,
+                                            proximity_routing_enabled: Some(proximity_enabled_save()),
+                                            room_width: Some(room_width_save()),
+                                            judging_timer_seconds: Some(judging_timer_save()),
                                         };
                                         match update_hackathon(slug_clone.clone(), req).await {
                                             Ok(updated_info) => {
@@ -383,6 +397,75 @@ pub fn HackathonSettings(slug: String) -> Element {
                                         }
                                     }
                                 }
+
+                                // Judging Configuration Section
+                                div { class: "flex flex-col gap-6 mt-8 pt-8 border-t border-border-neutral-primary",
+                                    h3 { class: "text-lg font-semibold text-foreground-neutral-primary", "Judging Configuration" }
+
+                                    // Proximity Routing Toggle
+                                    div { class: "flex items-center gap-3",
+                                        input {
+                                            r#type: "checkbox",
+                                            id: "proximity_routing",
+                                            class: "w-5 h-5 rounded",
+                                            checked: proximity_enabled(),
+                                            onchange: move |evt| {
+                                                proximity_enabled.set(evt.checked());
+                                            },
+                                        }
+                                        label { r#for: "proximity_routing", class: "text-base font-medium text-foreground-neutral-primary",
+                                            "Enable Proximity Routing"
+                                        }
+                                    }
+                                    p { class: "text-sm text-foreground-neutral-secondary -mt-4 ml-8",
+                                        "When enabled, judges can choose proximity-based routing which directs them to nearby tables."
+                                    }
+
+                                    // Room Width
+                                    if proximity_enabled() {
+                                        div { class: "flex flex-col gap-2",
+                                            label { class: "text-base font-medium text-foreground-neutral-primary", "Room Width (tables per row)" }
+                                            input {
+                                                class: "px-4 h-12 bg-background-neutral-primary text-foreground-brandNeutral-secondary text-sm font-normal rounded-[0.625rem] max-w-[200px]",
+                                                r#type: "number",
+                                                min: "1",
+                                                value: "{room_width()}",
+                                                oninput: move |evt| {
+                                                    if let Ok(num) = evt.value().parse::<i32>() {
+                                                        if num > 0 {
+                                                            room_width.set(num);
+                                                        }
+                                                    }
+                                                },
+                                            }
+                                            p { class: "text-sm text-foreground-neutral-secondary",
+                                                "Number of tables in each row for proximity calculations."
+                                            }
+                                        }
+                                    }
+
+                                    // Judging Timer
+                                    div { class: "flex flex-col gap-2",
+                                        label { class: "text-base font-medium text-foreground-neutral-primary", "Judging Timer (seconds)" }
+                                        input {
+                                            class: "px-4 h-12 bg-background-neutral-primary text-foreground-brandNeutral-secondary text-sm font-normal rounded-[0.625rem] max-w-[200px]",
+                                            r#type: "number",
+                                            min: "0",
+                                            value: "{judging_timer()}",
+                                            oninput: move |evt| {
+                                                if let Ok(num) = evt.value().parse::<i32>() {
+                                                    if num >= 0 {
+                                                        judging_timer.set(num);
+                                                    }
+                                                }
+                                            },
+                                        }
+                                        p { class: "text-sm text-foreground-neutral-secondary",
+                                            "Duration of the suggested judging timer. Set to 0 to disable."
+                                        }
+                                    }
+                                }
+
                                 div { class: "mt-12",
                                     Button { button_type: "submit".to_string(), "Save" }
                                 }
