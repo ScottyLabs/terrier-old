@@ -693,30 +693,37 @@ pub fn HackathonMessages(slug: String) -> Element {
 
                     div { class: "mt-6 flex flex-col gap-3",
                         // reverse to display most recent messages first
-                        for (orig_idx , item) in filtered_items.clone().into_iter().rev() {
-                            div {
-                                key: "{orig_idx}",
-                                class: if selected.read().as_ref().copied().map_or(false, |s| s == orig_idx) { "p-3 bg-background-neutral-subtle-pressed rounded" } else { "p-3 rounded hover:bg-background-neutral-secondary-enabled cursor-pointer" },
-                                onclick: move |_| selected_clone.set(Some(orig_idx)),
-                                div { class: "flex overflow-hidden items-start",
-                                    div { class: "flex flex-col overflow-hidden w-full",
-                                        p { class: "font-semibold truncate text-foreground-neutral-primary",
-                                            {item.title}
-                                        }
-                                        div { class: "flex flex-row justify-between",
-                                            p { class: "text-sm text-foreground-neutral-secondary",
-                                                {item.sender}
+                        if filtered_items.is_empty() {
+                            div { class: "flex items-center justify-center h-full text-foreground-neutral-secondary",
+                                "No matches found"
+                            }
+                        }
+                        else {
+                            for (orig_idx , item) in filtered_items.clone().into_iter().rev() {
+                                div {
+                                    key: "{orig_idx}",
+                                    class: if selected.read().as_ref().copied().map_or(false, |s| s == orig_idx) { "p-3 bg-background-neutral-subtle-pressed rounded" } else { "p-3 rounded hover:bg-background-neutral-secondary-enabled cursor-pointer" },
+                                    onclick: move |_| selected_clone.set(Some(orig_idx)),
+                                    div { class: "flex overflow-hidden items-start",
+                                        div { class: "flex flex-col overflow-hidden w-full",
+                                            p { class: "font-semibold truncate text-foreground-neutral-primary",
+                                                {item.title}
                                             }
+                                            div { class: "flex flex-row justify-between",
+                                                p { class: "text-sm text-foreground-neutral-secondary",
+                                                    {item.sender}
+                                                }
 
-                                            p { class: "text-sm text-right text-foreground-neutral-secondary",
-                                                {item.time}
+                                                p { class: "text-sm text-right text-foreground-neutral-secondary",
+                                                    {item.time}
+                                                }
                                             }
                                         }
                                     }
-                                }
-                                div { class: "mt-2 flex items-center gap-2",
-                                    div { class: "text-xs bg-background-neutral-primary text-foreground-neutral-primary px-2 py-1 rounded-full",
-                                        {item.tag}
+                                    div { class: "mt-2 flex items-center gap-2",
+                                        div { class: "text-xs bg-background-neutral-primary text-foreground-neutral-primary px-2 py-1 rounded-full",
+                                            {item.tag}
+                                        }
                                     }
                                 }
                             }
