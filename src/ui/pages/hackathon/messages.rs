@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::{
     Icon,
-    icons::ld_icons::{LdCheck, LdChevronDown, LdPlus, LdSearch},
+    icons::ld_icons::{LdCheck, LdChevronDown, LdCircle, LdPlus, LdSearch},
 };
 
 use crate::auth::hooks::use_hackathon_role;
@@ -668,16 +668,16 @@ pub fn HackathonMessages(slug: String) -> Element {
                                                     div { class: "flex gap-3 items-center",
                                                         div { class: "flex items-center justify-center p-2",
                                                             if option_selected {
-                                                                div { class: "w-4 h-4 bg-foreground-neutral-primary rounded flex items-center justify-center",
+                                                                div { class: "w-4 h-4 bg-foreground-neutral-primary rounded-full flex items-center justify-center",
                                                                     Icon {
-                                                                        width: 12,
-                                                                        height: 12,
-                                                                        icon: LdCheck,
+                                                                        width: 13,
+                                                                        height: 13,
+                                                                        icon: LdCircle,
                                                                         class: "text-white",
                                                                     }
                                                                 }
                                                             } else {
-                                                                div { class: "w-4 h-4 border border-foreground-neutral-primary rounded" }
+                                                                div { class: "w-4 h-4 border border-foreground-neutral-primary rounded-full" }
                                                             }
                                                         }
                                                         p { class: "text-sm leading-5 text-foreground-neutral-primary flex-1", {option_label} }
