@@ -613,10 +613,10 @@ pub fn HackathonMessages(slug: String) -> Element {
             div { class: "mb-4 md:mb-6",
                 TabSwitcher { active_tab, tabs }
             }
-            div { class: "bg-background-neutral-primary rounded-[20px] flex p-5 overflow-y-auto",
-            //div { class: "mt-6 w-full bg-white rounded-[16px] shadow p-8 flex gap-6",
+            //div { class: "flex h-full overflow-y-auto",
+            div { class: "grid grid-cols-2 h-full overflow-hidden items-center gap-3",
                 // Left column
-                div { class: "w-[260px]",
+                div { class: "w-[260px] h-full bg-background-neutral-primary rounded-[20px] p-4 md:p-7 overflow-y-auto",
                     // Search bar
                     div { class: "w-full md:w-[405px] h-10 border border-stroke-neutral-1 rounded-full flex items-center px-3 py-1",
                             Icon {
@@ -660,7 +660,7 @@ pub fn HackathonMessages(slug: String) -> Element {
                                             rsx! {
                                                 div {
                                                     key: "{option_value}",
-                                                    class: if option_selected { "px-3.5 py-2 h-9 bg-background-neutral-subtle-pressed" } else { "px-3.5 py-2 h-9 hover:bg-background-neutral-secondary-enabled cursor-pointer" },
+                                                    class: if option_selected { "px-3.5 h-9 flex items-center bg-background-neutral-subtle-pressed" } else { "px-3.5 h-9 flex items-center hover:bg-background-neutral-secondary-enabled cursor-pointer" },
                                                     onclick: move |_| {
                                                         filter_values_clone.set(vec![option_value_clone.clone()]);
                                                         filter_open.set(false);
@@ -698,17 +698,20 @@ pub fn HackathonMessages(slug: String) -> Element {
                                 key: "{orig_idx}",
                                 class: if selected.read().as_ref().copied().map_or(false, |s| s == orig_idx) { "p-3 bg-background-neutral-subtle-pressed rounded" } else { "p-3 rounded hover:bg-background-neutral-secondary-enabled cursor-pointer" },
                                 onclick: move |_| selected_clone.set(Some(orig_idx)),
-                                div { class: "flex justify-between items-start",
-                                    div { class: "flex flex-col",
-                                        p { class: "font-semibold text-foreground-neutral-primary",
+                                div { class: "flex overflow-hidden items-start",
+                                    div { class: "flex flex-col overflow-hidden w-full",
+                                        p { class: "font-semibold truncate text-foreground-neutral-primary",
                                             {item.title}
                                         }
-                                        p { class: "text-sm text-foreground-neutral-secondary",
-                                            {item.sender}
+                                        div { class: "flex flex-row justify-between",
+                                            p { class: "text-sm text-foreground-neutral-secondary",
+                                                {item.sender}
+                                            }
+
+                                            p { class: "text-sm text-right text-foreground-neutral-secondary",
+                                                {item.time}
+                                            }
                                         }
-                                    }
-                                    p { class: "text-sm text-foreground-neutral-secondary",
-                                        {item.time}
                                     }
                                 }
                                 div { class: "mt-2 flex items-center gap-2",
@@ -722,7 +725,7 @@ pub fn HackathonMessages(slug: String) -> Element {
                 }
 
                 // Right column (detail / composer)
-                div { class: "flex-[2] min-w-0 border-l border-stroke-neutral-1 pl-6",
+                div { class: "flex-[2] min-w-0 h-full pl-6 bg-background-neutral-primary rounded-[20px] flex flex-1 p-4 md:p-7 overflow-y-auto",
                     // Render different right-column content depending on active tab
                     if *active_tab.read() == MessagesTab::Announcements {
                         if compose_open() {
