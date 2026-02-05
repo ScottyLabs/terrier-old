@@ -684,7 +684,8 @@ pub fn HackathonMessages(slug: String) -> Element {
                     }
 
                     div { class: "mt-6 flex flex-col gap-3",
-                        for (orig_idx , item) in filtered_items.clone().into_iter() {
+                        // reverse to display most recent messages first
+                        for (orig_idx , item) in filtered_items.clone().into_iter().rev() {
                             div {
                                 key: "{orig_idx}",
                                 class: if selected.read().as_ref().copied().map_or(false, |s| s == orig_idx) { "p-3 bg-background-neutral-subtle-pressed rounded" } else { "p-3 rounded hover:bg-background-neutral-secondary-enabled cursor-pointer" },
