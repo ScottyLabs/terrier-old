@@ -721,10 +721,10 @@ pub async fn assign_all_judges(slug: String, prize_id: i32) -> Result<(), Server
         .ok_or_else(|| ServerFnError::new("Prize not found"))?;
 
     // Get all people in the hackathon
-    let people = get_hackathon_people(slug).await?;
+    let response = get_hackathon_people(slug, None, None, None, None).await?;
 
     // Assign each person to the prize track
-    for person in people {
+    for person in response.people {
         let new_assignment = judge_prize_track::ActiveModel {
             id: NotSet,
             judge_id: Set(person.user_id),

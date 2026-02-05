@@ -24,7 +24,7 @@ pub fn HackathonApply(slug: String) -> Element {
     }
 
     let hackathon = use_context::<Signal<HackathonInfo>>();
-    let role = use_context::<Option<HackathonRole>>();
+    let role = use_context::<Signal<Option<HackathonRole>>>();
     let application_refresh_trigger = use_context::<Signal<u32>>();
 
     // Check if user has already submitted an application
@@ -61,10 +61,10 @@ pub fn HackathonApply(slug: String) -> Element {
                             "Applications are not currently being accepted for this hackathon."
                         }
                     }
-                } else if role.as_ref().map(|r| r.role == "participant").unwrap_or(false) {
+                } else if role.read().as_ref().map(|r| r.role == "participant").unwrap_or(false) {
                     // User has been accepted and is now a participant
                     ApplicationStatus {
-                        variant: ApplicationStatusVariant::Accepted,
+                        variant: ApplicationStatusVariant::Confirmed,
                         hackathon_slug: slug.clone(),
                         application_status,
                         application_refresh_trigger,

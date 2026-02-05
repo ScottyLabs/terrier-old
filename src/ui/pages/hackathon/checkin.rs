@@ -36,8 +36,9 @@ pub fn HackathonCheckin(slug: String) -> Element {
     let _hackathon = use_context::<Signal<HackathonInfo>>();
 
     // Get user's role from context
-    let user_role = use_context::<Option<HackathonRole>>();
+    let user_role = use_context::<Signal<Option<HackathonRole>>>();
     let is_organizer_or_admin = user_role
+        .read()
         .as_ref()
         .and_then(|r| r.role_type())
         .map(|rt| rt == HackathonRoleType::Admin || rt == HackathonRoleType::Organizer)
@@ -104,9 +105,9 @@ fn ParticipantCheckinView(
     points: i32,
     on_refresh: EventHandler<()>,
 ) -> Element {
-    let user_role = use_context::<Option<HackathonRole>>();
+    let user_role = use_context::<Signal<Option<HackathonRole>>>();
     let is_mobile = use_context::<Signal<bool>>();
-    let user_id = user_role.as_ref().map(|r| r.user_id).unwrap_or(-1);
+    let user_id = user_role.read().as_ref().map(|r| r.user_id).unwrap_or(-1);
     // Use HTTPS URL for Universal Links (works with iOS camera app)
     let checkin_url = format!("https://terrier.scottylabs.org/h/{}/scan/{}", slug, user_id);
     let qr_svg = generate_qr_svg(&checkin_url);

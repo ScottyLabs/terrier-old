@@ -236,6 +236,9 @@ pub async fn unsubmit_application(slug: String) -> Result<(), ServerFnError> {
         .await?;
 
     // Only allow unsubmitting pending applications
+    if application.status == "draft" {
+        return Ok(());
+    }
     if application.status != "pending" {
         return Err(ServerFnError::new("Can only unsubmit pending applications"));
     }

@@ -108,4 +108,87 @@ impl<'a> UserRoleRepository<'a> {
     ) -> Result<bool, ServerFnError> {
         self.has_role(user_id, hackathon_id, &["organizer"]).await
     }
+    /// Find people with pagination, search, and filtering
+    pub async fn find_people_paginated(
+        &self,
+        hackathon_id: i32,
+        search: Option<String>,
+        roles: Option<Vec<String>>,
+        excluded_roles: Option<Vec<String>>,
+        page: u64,
+        per_page: u64,
+    ) -> Result<
+        (
+            Vec<(user_hackathon_roles::Model, Option<users::Model>)>,
+            u64,
+        ),
+        ServerFnError,
+    > {
+        use sea_orm::{
+            Condition, PaginatorTrait, QuerySelect,
+            sea_query::{Expr, Func},
+        };
+
+        let mut query = UserHackathonRoles::find()
+            .filter(user_hackathon_roles::Column::HackathonId.eq(hackathon_id))
+            .find_also_related(Users);
+
+        // Apply excluded roles filter
+        if let Some(excluded) = excluded_roles {
+            if !excluded.is_empty() {
+                query = query.filter(user_hackathon_roles::Column::Role.is_not_in(excluded));
+            }
+        }
+
+        // Apply roles filter
+        if let Some(included) = roles {
+            if !included.is_empty() {
+                query = query.filter(user_hackathon_roles::Column::Role.is_in(included));
+            }
+        }
+
+        // Apply search filter
+        if let Some(search_term) = search {
+            if !search_term.is_empty() {
+                let lower_search = search_term.to_lowercase();
+                query = query.filter(
+                    Condition::any()
+                        .add(
+                            Expr::expr(Func::lower(Expr::col((
+                                users::Entity,
+                                users::Column::Name,
+                            ))))
+                            .like(format!("%{}%", lower_search)),
+                        )
+                        .add(
+                            Expr::expr(Func::lower(Expr::col((
+                                users::Entity,
+                                users::Column::Email,
+                            ))))
+                            .like(format!("%{}%", lower_search)),
+                        )
+                        .add(
+                            Expr::expr(Func::lower(Expr::col((
+                                user_hackathon_roles::Entity,
+                                user_hackathon_roles::Column::Role,
+                            ))))
+                            .like(format!("%{}%", lower_search)),
+                        ),
+                );
+            }
+        }
+
+        let paginator = query.paginate(self.db, per_page);
+        let total = paginator
+            .num_items()
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to count people: {}", e)))?;
+
+        let items = paginator
+            .fetch_page(page)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to fetch people page: {}", e)))?;
+
+        Ok((items, total))
+    }
 }

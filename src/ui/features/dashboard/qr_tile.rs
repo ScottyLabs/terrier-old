@@ -13,9 +13,9 @@ use crate::{
 /// "Check in QR Code" text, and an expandable QR code
 #[component]
 pub fn QRTile() -> Element {
-    let user_role = use_context::<Option<HackathonRole>>();
+    let user_role = use_context::<Signal<Option<HackathonRole>>>();
     let hackathon = use_context::<Signal<HackathonInfo>>();
-    let user_id = user_role.as_ref().map(|r| r.user_id).unwrap_or(-1);
+    let user_id = user_role.read().as_ref().map(|r| r.user_id).unwrap_or(-1);
     let slug = hackathon.read().slug.clone();
     // Use HTTPS URL for Universal Links (works with iOS camera app)
     let checkin_url = format!("https://terrier.scottylabs.org/h/{}/scan/{}", slug, user_id);

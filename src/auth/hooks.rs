@@ -19,10 +19,21 @@ pub fn use_hackathon_role(
 pub fn use_require_access_or_redirect(
     required_roles: &'static [HackathonRoleType],
 ) -> Option<Element> {
-    let role = use_context::<Option<HackathonRole>>();
+    let role = use_context::<Signal<Option<HackathonRole>>>();
 
-    if !role
-        .as_ref()
+    let role_val = role.read();
+    let role_ref = role_val.as_ref();
+
+    // If role is None, it means we're still loading it
+    if role_ref.is_none() {
+        return Some(rsx! {
+            div { class: "flex items-center justify-center h-screen",
+                p { class: "text-foreground-neutral-secondary", "Loading permissions..." }
+            }
+        });
+    }
+
+    if !role_ref
         .map(|r| has_access(r, required_roles))
         .unwrap_or(false)
     {
@@ -35,7 +46,7 @@ pub fn use_require_access_or_redirect(
 }
 
 #[server]
-async fn get_hackathon_role(slug: String) -> Result<Option<HackathonRole>, ServerFnError> {
+pub async fn get_hackathon_role(slug: String) -> Result<Option<HackathonRole>, ServerFnError> {
     use crate::{
         AppState,
         entities::{hackathons, prelude::*, user_hackathon_roles, users},

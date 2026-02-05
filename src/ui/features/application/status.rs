@@ -23,6 +23,8 @@ pub fn ApplicationStatus(
     let slug_for_confirm = hackathon_slug.clone();
     let slug_for_undo = hackathon_slug.clone();
 
+    let mut role_refresh_trigger = use_context::<Signal<u32>>();
+
     match variant {
         ApplicationStatusVariant::Submitted => {
             rsx! {
@@ -151,6 +153,10 @@ pub fn ApplicationStatus(
                                         .await
                                     {
                                         Ok(_) => {
+                                            // Refresh role before redirecting to avoid 403
+                                            let current_role_trigger = *role_refresh_trigger.read();
+                                            role_refresh_trigger.set(current_role_trigger + 1);
+
                                             application_status.restart();
                                             let current = *application_refresh_trigger.read();
                                             application_refresh_trigger.set(current + 1);
@@ -219,6 +225,10 @@ pub fn ApplicationStatus(
                                         .await
                                     {
                                         Ok(_) => {
+                                            // Refresh role after undoing confirmation
+                                            let current_role_trigger = *role_refresh_trigger.read();
+                                            role_refresh_trigger.set(current_role_trigger + 1);
+
                                             application_status.restart();
                                             let current = *application_refresh_trigger.read();
                                             application_refresh_trigger.set(current + 1);

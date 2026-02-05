@@ -41,15 +41,16 @@ pub fn HackathonSchedule(slug: String) -> Element {
     let hackathon = use_context::<Signal<HackathonInfo>>();
 
     // Get user's role from context
-    let user_role = use_context::<Option<HackathonRole>>();
+    let user_role = use_context::<Signal<Option<HackathonRole>>>();
     let is_admin_or_organizer = user_role
+        .read()
         .as_ref()
         .and_then(|r| r.role_type())
         .map(|rt| rt == HackathonRoleType::Admin || rt == HackathonRoleType::Organizer)
         .unwrap_or(false);
 
     // Get current user ID for event highlighting
-    let current_user_id = user_role.as_ref().map(|r| r.user_id);
+    let current_user_id = user_role.read().as_ref().map(|r| r.user_id);
 
     // Modal state - None for create, Some(event) for edit
     let mut editing_event = use_signal(|| None::<ScheduleEvent>);
