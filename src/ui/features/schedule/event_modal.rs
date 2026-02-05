@@ -11,7 +11,7 @@ use crate::{
             CreateEventRequest, UpdateEventRequest, create_event, delete_event, update_event,
         },
         hackathons::types::ScheduleEvent,
-        people::handlers::{HackathonPerson, get_hackathon_people},
+        people::handlers::{HackathonPeopleResponse, HackathonPerson, get_hackathon_people},
     },
     ui::foundation::{modals::base::ModalBase, utils::get_avatar_color},
 };
@@ -116,14 +116,16 @@ pub fn EventModal(
     let people_resource = use_resource(move || {
         let slug = slug_for_people.clone();
         async move {
-            let result: Result<Vec<HackathonPerson>, _> = get_hackathon_people(slug).await;
-            result.ok()
+            get_hackathon_people(slug, None, None, None, None)
+                .await
+                .ok()
         }
     });
 
     // Initialize selected organizers from event when people are loaded (only once)
     let _ = use_memo(move || {
-        if let Some(people) = people_resource.read().as_ref().and_then(|p| p.as_ref()) {
+        if let Some(res) = people_resource.read().as_ref().and_then(|res| res.as_ref()) {
+            let people = &res.people;
             // Only initialize once - don't re-populate after user clears organizers
             if !has_initialized_organizers() {
                 let orgs: Vec<OrganizerInfo> = initial_organizer_ids
@@ -153,11 +155,11 @@ pub fn EventModal(
         people_resource
             .read()
             .as_ref()
-            .and_then(|p| p.as_ref())
-            .map(|people| {
-                people
+            .and_then(|res| res.as_ref())
+            .map(|res: &HackathonPeopleResponse| {
+                res.people
                     .iter()
-                    .filter(|p| {
+                    .filter(|p: &&HackathonPerson| {
                         // Only show organizers/admins
                         (p.role == "organizer" || p.role == "admin")
                             && !selected_ids.contains(&p.user_id)

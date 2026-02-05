@@ -17,15 +17,28 @@ pub struct HackathonPerson {
     pub team_id: Option<i32>,
 }
 
-/// Get all people associated with a hackathon, excluding applicants
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "server", derive(utoipa::ToSchema))]
+pub struct HackathonPeopleResponse {
+    pub people: Vec<HackathonPerson>,
+    pub total: u64,
+    pub page: u64,
+    pub per_page: u64,
+}
+
+/// Get all people associated with a hackathon, with pagination and filtering
 #[cfg_attr(feature = "server", utoipa::path(
-    get,
+    post,
     path = "/api/hackathons/{slug}/people",
     params(
-        ("slug" = String, Path, description = "Hackathon slug")
+        ("slug" = String, Path, description = "Hackathon slug"),
+        ("page" = Option<u64>, Query, description = "Page number (0-indexed)"),
+        ("per_page" = Option<u64>, Query, description = "Items per page"),
+        ("search" = Option<String>, Query, description = "Search query"),
+        ("roles" = Option<Vec<String>>, Query, description = "Filter by roles"),
     ),
     responses(
-        (status = 200, description = "People retrieved successfully", body = Vec<HackathonPerson>),
+        (status = 200, description = "People retrieved successfully", body = HackathonPeopleResponse),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Requires admin or organizer role"),
         (status = 404, description = "Hackathon not found"),
@@ -33,8 +46,14 @@ pub struct HackathonPerson {
     ),
     tag = "hackathons"
 ))]
-#[get("/api/hackathons/:slug/people", user: SyncedUser)]
-pub async fn get_hackathon_people(slug: String) -> Result<Vec<HackathonPerson>, ServerFnError> {
+#[post("/api/hackathons/:slug/people", user: SyncedUser)]
+pub async fn get_hackathon_people(
+    slug: String,
+    page: Option<u64>,
+    per_page: Option<u64>,
+    search: Option<String>,
+    roles: Option<Vec<String>>,
+) -> Result<HackathonPeopleResponse, ServerFnError> {
     use crate::domain::people::repository::UserRoleRepository;
 
     let ctx = RequestContext::extract(&user)
@@ -45,14 +64,26 @@ pub async fn get_hackathon_people(slug: String) -> Result<Vec<HackathonPerson>, 
     Permissions::require_admin_or_organizer(&ctx).await?;
 
     let hackathon = ctx.hackathon()?;
+    let is_admin =
+        Permissions::is_global_admin(&ctx) || Permissions::is_hackathon_admin(&ctx).await?;
 
-    // Fetch all user-hackathon roles for this hackathon excluding applicants
+    // Determine excluded roles based on admin status
+    let excluded_roles = if is_admin {
+        None
+    } else {
+        Some(vec!["applicant".to_string()])
+    };
+
+    let page = page.unwrap_or(0);
+    let per_page = per_page.unwrap_or(50);
+
+    // Fetch paginated people
     let role_repo = UserRoleRepository::new(&ctx.state.db);
-    let roles = role_repo
-        .find_all_roles_for_hackathon_excluding_role(hackathon.id, "applicant")
+    let (roles_data, total) = role_repo
+        .find_people_paginated(hackathon.id, search, roles, excluded_roles, page, per_page)
         .await?;
 
-    let results = roles
+    let people = roles_data
         .into_iter()
         .filter_map(|(role, user_opt)| {
             user_opt.map(|user| HackathonPerson {
@@ -66,5 +97,10 @@ pub async fn get_hackathon_people(slug: String) -> Result<Vec<HackathonPerson>, 
         })
         .collect();
 
-    Ok(results)
+    Ok(HackathonPeopleResponse {
+        people,
+        total,
+        page,
+        per_page,
+    })
 }

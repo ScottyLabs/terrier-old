@@ -70,9 +70,10 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
             }
 
             // Fetch available users for judge assignment
-            match get_hackathon_people(slug.clone()).await {
-                Ok(users) => {
-                    let user_list: Vec<(i32, String)> = users
+            match get_hackathon_people(slug.clone(), None, None, None, None).await {
+                Ok(response) => {
+                    let user_list: Vec<(i32, String)> = response
+                        .people
                         .into_iter()
                         .map(|u: HackathonPerson| (u.user_id, u.name.unwrap_or_else(|| u.email)))
                         .collect();

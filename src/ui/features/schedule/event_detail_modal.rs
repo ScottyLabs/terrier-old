@@ -26,8 +26,8 @@ pub fn EventDetailModal(
     let people_resource = use_resource(move || {
         let slug = slug.clone();
         async move {
-            let result: Result<Vec<HackathonPerson>, _> = get_hackathon_people(slug).await;
-            result.ok()
+            let result = get_hackathon_people(slug, None, None, None, None).await;
+            result.ok().map(|res| res.people)
         }
     });
 
@@ -39,10 +39,13 @@ pub fn EventDetailModal(
             .iter()
             .filter_map(|org_id| {
                 if let Some(Some(people_list)) = people.as_ref() {
-                    people_list.iter().find(|p| p.user_id == *org_id).map(|p| {
-                        let name = p.name.clone().unwrap_or_else(|| p.email.clone());
-                        (*org_id, name.clone(), get_avatar_color(&name).to_string())
-                    })
+                    people_list
+                        .iter()
+                        .find(|p: &&HackathonPerson| p.user_id == *org_id)
+                        .map(|p: &HackathonPerson| {
+                            let name = p.name.clone().unwrap_or_else(|| p.email.clone());
+                            (*org_id, name.clone(), get_avatar_color(&name).to_string())
+                        })
                 } else {
                     Some((
                         *org_id,

@@ -15,7 +15,7 @@ use crate::{
             UpdateEventRequest, delete_event, get_user_schedule, update_event,
         },
         hackathons::types::{HackathonInfo, ScheduleEvent},
-        people::handlers::{HackathonPerson, get_hackathon_people},
+        people::handlers::{HackathonPeopleResponse, HackathonPerson, get_hackathon_people},
     },
     ui::foundation::utils::get_avatar_color,
 };
@@ -46,8 +46,9 @@ pub fn HackathonScheduleEdit(slug: String, event_id: i32) -> Element {
     let hackathon = use_context::<Signal<HackathonInfo>>();
 
     // Get user's role from context to check admin/organizer status
-    let user_role = use_context::<Option<HackathonRole>>();
+    let user_role = use_context::<Signal<Option<HackathonRole>>>();
     let is_admin_or_organizer = user_role
+        .read()
         .as_ref()
         .and_then(|r: &HackathonRole| r.role_type())
         .map(|rt| rt == HackathonRoleType::Admin || rt == HackathonRoleType::Organizer)
@@ -109,8 +110,9 @@ pub fn HackathonScheduleEdit(slug: String, event_id: i32) -> Element {
     let people_resource = use_resource(move || {
         let slug = slug_for_people.clone();
         async move {
-            let result: Result<Vec<HackathonPerson>, _> = get_hackathon_people(slug).await;
-            result.ok()
+            get_hackathon_people(slug, None, None, None, None)
+                .await
+                .ok()
         }
     });
 
@@ -118,7 +120,8 @@ pub fn HackathonScheduleEdit(slug: String, event_id: i32) -> Element {
     let mut has_initialized_organizers = use_signal(|| false);
     let _ = use_memo(move || {
         if let Some(Some(event)) = event_resource.read().as_ref() {
-            if let Some(people) = people_resource.read().as_ref().and_then(|p| p.as_ref()) {
+            if let Some(res) = people_resource.read().as_ref().and_then(|res| res.as_ref()) {
+                let people = &res.people;
                 if !has_initialized_organizers() {
                     let orgs: Vec<OrganizerInfo> = event
                         .organizer_ids
@@ -149,11 +152,11 @@ pub fn HackathonScheduleEdit(slug: String, event_id: i32) -> Element {
         people_resource
             .read()
             .as_ref()
-            .and_then(|p| p.as_ref())
-            .map(|people| {
-                people
+            .and_then(|res| res.as_ref())
+            .map(|res: &HackathonPeopleResponse| {
+                res.people
                     .iter()
-                    .filter(|p| {
+                    .filter(|p: &&HackathonPerson| {
                         (p.role == "organizer" || p.role == "admin")
                             && !selected_ids.contains(&p.user_id)
                             && (search.is_empty()

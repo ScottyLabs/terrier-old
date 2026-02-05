@@ -40,6 +40,9 @@ pub async fn decline_attendance(slug: String) -> Result<(), ServerFnError> {
         .await?;
 
     // Only allow declining accepted applications
+    if application.status == "declined" {
+        return Ok(());
+    }
     if application.status != "accepted" {
         return Err(ServerFnError::new("Can only decline accepted applications"));
     }
@@ -90,6 +93,9 @@ pub async fn confirm_attendance(slug: String) -> Result<(), ServerFnError> {
         .await?;
 
     // Only allow confirming accepted applications
+    if application.status == "confirmed" {
+        return Ok(());
+    }
     if application.status != "accepted" {
         return Err(ServerFnError::new("Can only confirm accepted applications"));
     }
@@ -154,6 +160,9 @@ pub async fn undo_confirmation(slug: String) -> Result<(), ServerFnError> {
         .await?;
 
     // Only allow undoing confirmed applications
+    if application.status == "accepted" {
+        return Ok(());
+    }
     if application.status != "confirmed" {
         return Err(ServerFnError::new("Can only undo confirmed applications"));
     }

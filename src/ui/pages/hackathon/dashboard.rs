@@ -14,8 +14,9 @@ pub fn HackathonDashboard(slug: String) -> Element {
         return no_access;
     }
 
-    let user_role = use_context::<Option<HackathonRole>>();
+    let user_role = use_context::<Signal<Option<HackathonRole>>>();
     let is_participant = user_role
+        .read()
         .as_ref()
         .map(|r| r.role == "participant")
         .unwrap_or(false);
