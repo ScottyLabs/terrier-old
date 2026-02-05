@@ -1,0 +1,515 @@
+    Checking terrier v0.1.0 (/Users/tsumacpro/terrier)
+error[E0432]: unresolved import `crate::server::tartanhacks_apple_app_site_association`
+  --> src/server.rs:70:5
+   |
+70 | use crate::server::tartanhacks_apple_app_site_association;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `tartanhacks_apple_app_site_association` in `server`
+
+error[E0432]: unresolved import `crate::server::tartanhacks_assetlinks_json`
+  --> src/server.rs:71:5
+   |
+71 | use crate::server::tartanhacks_assetlinks_json;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `tartanhacks_assetlinks_json` in `server`
+
+error[E0425]: cannot find function `tartanhacks_apple_app_site_association` in module `crate::domain::applications::presets`
+   --> src/server.rs:323:59
+    |
+323 | ...::presets::tartanhacks_apple_app_site_association();
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ not found in `crate::domain::applications::presets`
+    |
+help: consider importing this function
+    |
+ 41 + use crate::domain::applications::presets::tartanhacks::tartanhacks_apple_app_site_association;
+    |
+help: if you import `tartanhacks_apple_app_site_association`, refer to it directly
+    |
+323 -                     crate::domain::applications::presets::tartanhacks_apple_app_site_association();
+323 +                     tartanhacks_apple_app_site_association();
+    |
+
+error[E0425]: cannot find function `tartanhacks_assetlinks_json` in module `crate::domain::applications::presets`
+   --> src/server.rs:331:69
+    |
+331 | ...ations::presets::tartanhacks_assetlinks_json();
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ not found in `crate::domain::applications::presets`
+    |
+help: consider importing this function
+    |
+ 41 + use crate::domain::applications::presets::tartanhacks::tartanhacks_assetlinks_json;
+    |
+help: if you import `tartanhacks_assetlinks_json`, refer to it directly
+    |
+331 -                 let content = crate::domain::applications::presets::tartanhacks_assetlinks_json();
+331 +                 let content = tartanhacks_assetlinks_json();
+    |
+
+warning: unused import: `ModelTrait`
+   --> src/domain/applications/handlers/events.rs:229:63
+    |
+229 | ...t, ColumnTrait, EntityTrait, ModelTrait, QueryFilter, Set};
+    |                                 ^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `files::*`
+  --> src/domain/applications/handlers/mod.rs:11:9
+   |
+11 | pub use files::*;
+   |         ^^^^^^^^
+
+warning: unused import: `rand::Rng`
+  --> src/domain/judging/handlers/admin.rs:35:9
+   |
+35 |     use rand::Rng;
+   |         ^^^^^^^^^
+
+warning: unused import: `users`
+   --> src/domain/judging/handlers/admin.rs:698:53
+    |
+698 |     use crate::entities::{judge_prize_track, prize, users};
+    |                                                     ^^^^^
+
+warning: unused import: `hackathons`
+  --> src/domain/mock_expo/handlers.rs:17:27
+   |
+17 |     use crate::entities::{hackathons, submission, teams, users};
+   |                           ^^^^^^^^^^
+
+warning: unused imports: `ColumnTrait` and `QueryFilter`
+  --> src/domain/mock_expo/handlers.rs:20:48
+   |
+20 | ...eValue::NotSet, ColumnTrait, EntityTrait, QueryFilter, Set,
+   |                    ^^^^^^^^^^^               ^^^^^^^^^^^
+
+warning: unused import: `ModelTrait`
+   --> src/domain/mock_expo/handlers.rs:135:45
+    |
+135 |     use sea_orm::{ColumnTrait, EntityTrait, ModelTrait, QueryFilter};
+    |                                             ^^^^^^^^^^
+
+warning: unused import: `mass_update::*`
+ --> src/domain/people/handlers/mod.rs:7:9
+  |
+7 | pub use mass_update::*;
+  |         ^^^^^^^^^^^^^^
+
+warning: unused import: `ModelTrait`
+  --> src/domain/prizes/handlers.rs:83:45
+   |
+83 |     use sea_orm::{ColumnTrait, EntityTrait, ModelTrait, QueryFilter};
+   |                                             ^^^^^^^^^^
+
+warning: unused import: `ModelTrait`
+   --> src/domain/prizes/handlers.rs:292:53
+    |
+292 | ...   ActiveModelTrait, ColumnTrait, EntityTrait, ModelTrait, QueryFilt...
+    |                                                   ^^^^^^^^^^
+
+warning: unused import: `super::event_checkins::Entity as EventCheckins`
+ --> src/entities/prelude.rs:4:9
+  |
+4 | pub use super::event_checkins::Entity as EventCheckins;
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::event_organizers::Entity as EventOrganizers`
+ --> src/entities/prelude.rs:5:9
+  |
+5 | pub use super::event_organizers::Entity as EventOrganizers;
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::events::Entity as Events`
+ --> src/entities/prelude.rs:6:9
+  |
+6 | pub use super::events::Entity as Events;
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::feature::Entity as Feature`
+ --> src/entities/prelude.rs:7:9
+  |
+7 | pub use super::feature::Entity as Feature;
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::judge_feature_assignment::Entity as JudgeFeatureAssignment`
+ --> src/entities/prelude.rs:9:9
+  |
+9 | pub use super::judge_feature_assignment::Entity as JudgeFeatureAssignment;
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::judge_prize_track::Entity as JudgePrizeTrack`
+  --> src/entities/prelude.rs:10:9
+   |
+10 | pub use super::judge_prize_track::Entity as JudgePrizeTrack;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::judge_walk_type::Entity as JudgeWalkType`
+  --> src/entities/prelude.rs:11:9
+   |
+11 | pub use super::judge_walk_type::Entity as JudgeWalkType;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::pairwise_comparison::Entity as PairwiseComparison`
+  --> src/entities/prelude.rs:12:9
+   |
+12 | pub use super::pairwise_comparison::Entity as PairwiseComparison;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::prize::Entity as Prize`
+  --> src/entities/prelude.rs:13:9
+   |
+13 | pub use super::prize::Entity as Prize;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::prize_feature_weight::Entity as PrizeFeatureWeight`
+  --> src/entities/prelude.rs:14:9
+   |
+14 | pub use super::prize_feature_weight::Entity as PrizeFeatureWeight;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::prize_required_events::Entity as PrizeRequiredEvents`
+  --> src/entities/prelude.rs:15:9
+   |
+15 | pub use super::prize_required_events::Entity as PrizeRequiredEvents;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::prize_track_entry::Entity as PrizeTrackEntry`
+  --> src/entities/prelude.rs:16:9
+   |
+16 | pub use super::prize_track_entry::Entity as PrizeTrackEntry;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::project_feature_score::Entity as ProjectFeatureScore`
+  --> src/entities/prelude.rs:17:9
+   |
+17 | pub use super::project_feature_score::Entity as ProjectFeatureScore;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::project_visit::Entity as ProjectVisit`
+  --> src/entities/prelude.rs:18:9
+   |
+18 | pub use super::project_visit::Entity as ProjectVisit;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::submission::Entity as Submission`
+  --> src/entities/prelude.rs:19:9
+   |
+19 | pub use super::submission::Entity as Submission;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::submission_ai_summary::Entity as SubmissionAiSummary`
+  --> src/entities/prelude.rs:20:9
+   |
+20 | pub use super::submission_ai_summary::Entity as SubmissionAiSummary;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `DateTime`
+ --> src/ui/features/dashboard/timer_tile.rs:2:14
+  |
+2 | use chrono::{DateTime, Utc};
+  |              ^^^^^^^^
+
+warning: unused import: `LdX`
+ --> src/ui/features/schedule/event_modal.rs:5:62
+  |
+5 |     icons::ld_icons::{LdClock, LdMapPin, LdSearch, LdTarget, LdX},
+  |                                                              ^^^
+
+warning: unused imports: `TeamFormFields` and `TeamForm`
+  --> src/ui/features/teams/mod.rs:10:16
+   |
+10 | pub use form::{TeamForm, TeamFormFields};
+   |                ^^^^^^^^  ^^^^^^^^^^^^^^
+
+warning: unused import: `use_window_width::use_window_width`
+ --> src/ui/foundation/hooks/mod.rs:6:9
+  |
+6 | pub use use_window_width::use_window_width;
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `LdMessageSquare` and `LdUser`
+ --> src/ui/foundation/layout/sidebar.rs:4:5
+  |
+4 |     LdMessageSquare, LdQrCode, LdSettings, LdTrophy, LdUser, LdUsers, LdX,
+  |     ^^^^^^^^^^^^^^^                                  ^^^^^^
+
+warning: unused import: `LdCalendar`
+ --> src/ui/pages/hackathon/checkin.rs:6:9
+  |
+6 | ...   LdCalendar, LdCheck, LdChevronLeft, LdExpand, LdLoader, LdLock, LdQ...
+  |       ^^^^^^^^^^
+
+warning: unused import: `QRModal`
+ --> src/ui/pages/hackathon/dashboard.rs:2:22
+  |
+2 |     HackerGuideTile, QRModal, QRTile, TablePromptModal, TimerTile,
+  |                      ^^^^^^^
+
+warning: unused import: `AiQuestionsResponse`
+  --> src/ui/pages/hackathon/judge.rs:13:17
+   |
+13 | ...   AiQuestionsResponse, CompleteVisitRequest, CurrentProject, Feature...
+   |       ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `auth::hooks::use_hackathon_role`
+ --> src/ui/pages/hackathon/layout.rs:4:20
+  |
+4 | use crate::{Route, auth::hooks::use_hackathon_role, ui::foundation::layou...
+  |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `PrizeInfo`
+  --> src/ui/pages/hackathon/people.rs:18:32
+   |
+18 |     domain::prizes::handlers::{PrizeInfo, get_prizes},
+   |                                ^^^^^^^^^
+
+warning: unused import: `domain::hackathons::types::ScheduleEvent`
+  --> src/ui/pages/hackathon/prize_tracks.rs:10:5
+   |
+10 |     domain::hackathons::types::ScheduleEvent,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `AiSummaryResponse`
+  --> src/ui/pages/hackathon/results.rs:14:21
+   |
+14 | ...   types::{AiSummaryResponse, JudgeVisitNotes, PrizeTrackResults, Pro...
+   |               ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `ParticipantInfo`
+  --> src/ui/pages/hackathon/scan.rs:15:9
+   |
+15 | ...   ParticipantInfo, get_participant_info, get_user_schedule, organize...
+   |       ^^^^^^^^^^^^^^^
+
+warning: use of deprecated method `rand::Rng::gen_range`: Renamed to `random_range`
+   --> src/domain/mock_expo/handlers.rs:304:34
+    |
+304 |             let num_prizes = rng.gen_range(1..=max_prizes);
+    |                                  ^^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated method `rand::Rng::gen_range`: Renamed to `random_range`
+   --> src/domain/mock_expo/handlers.rs:382:33
+    |
+382 |         let ux_score: f64 = rng.gen_range(0.0..=10.0);
+    |                                 ^^^^^^^^^
+
+warning: use of deprecated method `rand::Rng::gen_range`: Renamed to `random_range`
+   --> src/domain/mock_expo/handlers.rs:383:35
+    |
+383 |         let tech_score: f64 = rng.gen_range(0.0..=10.0);
+    |                                   ^^^^^^^^^
+
+warning: use of deprecated method `rand::Rng::gen_range`: Renamed to `random_range`
+   --> src/domain/mock_expo/handlers.rs:384:39
+    |
+384 |         let applovin_score: f64 = rng.gen_range(0.0..=10.0);
+    |                                       ^^^^^^^^^
+
+warning: unused import: `EntityTrait`
+  --> src/domain/mock_expo/handlers.rs:20:61
+   |
+20 | ...   ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, Q...
+   |                                                           ^^^^^^^^^^^
+
+warning: unused import: `QuerySelect`
+   --> src/domain/people/repository.rs:128:40
+    |
+128 |             Condition, PaginatorTrait, QuerySelect,
+    |                                        ^^^^^^^^^^^
+
+warning: unused variable: `description`
+   --> src/domain/judging/handlers/admin.rs:365:9
+    |
+365 |     let description = sub
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_description`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `means`
+   --> src/domain/judging/score.rs:109:13
+    |
+109 |         let means = vec![0.0; n];
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_means`
+
+warning: unused variable: `hackathon`
+   --> src/domain/judging/handlers/unified.rs:783:9
+    |
+783 |     let hackathon = ctx.hackathon()?;
+    |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_hackathon`
+
+warning: unused variable: `role_entry`
+   --> src/domain/people/handlers/mass_update.rs:179:13
+    |
+179 |         let role_entry = crate::entities::user_hackathon_roles::Entity:...
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_role_entry`
+
+warning: value assigned to `required_event_ids` is never read
+   --> src/domain/prizes/handlers.rs:359:34
+    |
+359 |     let mut required_event_ids = Vec::new();
+    |                                  ^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `slug`
+   --> src/domain/teams/handlers/invitations.rs:258:33
+    |
+258 | ...nc fn decline_invitation(slug: String, invitation_id: i32) -> Result...
+    |                             ^^^^ help: if this is intentional, prefix it with an underscore: `_slug`
+
+warning: variable does not need to be mutable
+   --> src/ui/features/dashboard/qr_tile.rs:104:25
+    |
+104 | ...   let mut eval = document::eval("if (window.stopQrScanner) window.s...
+    |           ----^^^^
+    |           |
+    |           help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `eval`
+   --> src/ui/features/dashboard/qr_tile.rs:104:25
+    |
+104 |                     let mut eval = document::eval("if (window.stopQrSca...
+    |                         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_eval`
+
+warning: variable does not need to be mutable
+   --> src/ui/features/dashboard/qr_tile.rs:136:9
+    |
+136 |     let mut eval = document::eval(
+    |         ----^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+ --> src/ui/features/dashboard/table_prompt.rs:8:9
+  |
+8 |     let mut submission_resource = use_resource({
+  |         ----^^^^^^^^^^^^^^^^^^^
+  |         |
+  |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/ui/features/schedule/event_modal.rs:97:9
+   |
+97 |     let mut visible_to_role = use_signal(|| initial_visible_to);
+   |         ----^^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/ui/features/schedule/event_modal.rs:99:9
+   |
+99 |     let mut is_visible = use_signal(|| initial_is_visible);
+   |         ----^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/ui/features/schedule/event_modal.rs:101:9
+    |
+101 |     let mut checkin_type = use_signal(|| initial_checkin_type);
+    |         ----^^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+ --> src/ui/foundation/hooks/use_window_width.rs:4:9
+  |
+4 |     let mut width = use_signal(|| 0.0);
+  |         ----^^^^^
+  |         |
+  |         help: remove this `mut`
+
+warning: unused variable: `hackathon`
+  --> src/ui/pages/hackathon/event_edit.rs:46:9
+   |
+46 |     let hackathon = use_context::<Signal<HackathonInfo>>();
+   |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_hackathon`
+
+warning: variable does not need to be mutable
+  --> src/ui/pages/hackathon/judge.rs:51:9
+   |
+51 |     let mut expanded_cards: Signal<std::collections::HashSet<i32>> =
+   |         ----^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: unused variable: `visit_id`
+   --> src/ui/pages/hackathon/judge.rs:627:9
+    |
+627 |     let visit_id = project.visit_id;
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_visit_id`
+
+warning: variable does not need to be mutable
+  --> src/ui/pages/hackathon/layout.rs:12:9
+   |
+12 |     let mut role_refresh_trigger = use_context_provider(|| Signal::new(0...
+   |         ----^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: unused variable: `is_mobile`
+ --> src/ui/pages/hackathon/layout.rs:9:9
+  |
+9 |     let is_mobile = use_context::<Signal<bool>>();
+  |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_is_mobile`
+
+warning: variable does not need to be mutable
+  --> src/ui/pages/hackathon/people.rs:54:9
+   |
+54 |     let mut active_tab = use_signal(|| PeopleTab::Individuals);
+   |         ----^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/ui/pages/hackathon/schedule.rs:80:9
+   |
+80 |     let mut selected_day = use_signal(|| {
+   |         ----^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: unused variable: `hour`
+   --> src/ui/pages/hackathon/schedule.rs:317:21
+    |
+317 |                 for hour in START_HOUR..END_HOUR {
+    |                     ^^^^ help: if this is intentional, prefix it with an underscore: `_hour`
+
+warning: unused variable: `nav`
+   --> src/ui/pages/hackathon/schedule.rs:721:9
+    |
+721 |     let nav = use_navigator();
+    |         ^^^ help: if this is intentional, prefix it with an underscore: `_nav`
+
+warning: unused variable: `table_num`
+   --> src/ui/pages/hackathon/submission.rs:240:45
+    |
+240 | ...n_submit: move |(data, table_num): (std::collections::HashMap<String...
+    |                           ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_table_num`
+
+warning: variable does not need to be mutable
+   --> src/ui/pages/hackathon/submission.rs:610:9
+    |
+610 |     let mut form_values = use_signal(|| initial_values.clone().unwrap_o...
+    |         ----^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/main.rs:170:9
+    |
+170 |     let mut is_mobile = use_signal(|| false);
+    |         ----^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+Some errors have detailed explanations: E0425, E0432.
+For more information about an error, try `rustc --explain E0425`.
+warning: `terrier` (bin "terrier") generated 71 warnings (39 duplicates)
+error: could not compile `terrier` (bin "terrier") due to 4 previous errors; 71 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+warning: `terrier` (bin "terrier" test) generated 71 warnings (32 duplicates)
+error: could not compile `terrier` (bin "terrier" test) due to 4 previous errors; 71 warnings emitted

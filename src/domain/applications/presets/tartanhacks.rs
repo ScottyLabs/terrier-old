@@ -941,6 +941,21 @@ pub fn tartanhacks_submission_preset() -> FormSchema {
                 section: Some("Project Links".to_string()),
                 conditional: None,
             },
+            // Demo URL
+            FormField {
+                id: "demo_url".to_string(),
+                field_type: FieldType::Url {
+                    placeholder: Some("https://demo.terrier.scottylabs.org/...".to_string()),
+                },
+                label: "Demo URL".to_string(),
+                name: "demo_url".to_string(),
+                required: false,
+                help_text: Some("Link to a demo of your project.".to_string()),
+                default_value: None,
+                order: next_order(),
+                section: Some("Project Links".to_string()),
+                conditional: None,
+            },
         ],
         version: "1.0".to_string(),
     }
@@ -990,5 +1005,25 @@ pub fn tartanhacks_apple_app_site_association() -> String {
     }
 }";
 
+    content.to_string()
+}
+
+pub fn tartanhacks_assetlinks_json() -> String {
+    let content = r#"[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_accounts",
+      "delegate_permission/common.use_as_origin"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "org.scottylabs.thdapp",
+      "sha256_cert_fingerprints": [
+        "95:7C:2E:2C:AD:EB:61:8B:F9:22:4E:16:28:D1:8F:FD:25:11:CF:3B:76:CD:F1:F4:BB:39:FB:A8:E2:A5:CE:76"
+      ]
+    }
+  }
+]"#;
     content.to_string()
 }

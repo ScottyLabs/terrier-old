@@ -313,15 +313,24 @@ pub async fn setup() {
         .layer(Extension(app_state.clone()));
 
     // Truly public routes - no auth layers at all
-    let public_router = Router::new().route(
-        "/.well-known/apple-app-site-association",
-        get(|| async {
-            let content =
-                crate::domain::applications::presets::tartanhacks_apple_app_site_association();
-            tracing::info!("Apple App Site Association: {}", content);
-            ([(http::header::CONTENT_TYPE, "application/json")], content)
-        }),
-    );
+    let public_router = Router::new()
+        .route(
+            "/.well-known/apple-app-site-association",
+            get(|| async {
+                let content =
+                    crate::domain::applications::presets::tartanhacks_apple_app_site_association();
+                tracing::info!("Apple App Site Association: {}", content);
+                ([(http::header::CONTENT_TYPE, "application/json")], content)
+            }),
+        )
+        .route(
+            "/.well-known/assetlinks.json",
+            get(|| async {
+                let content = crate::domain::applications::presets::tartanhacks_assetlinks_json();
+                tracing::info!("Android Asset Links: {}", content);
+                ([(http::header::CONTENT_TYPE, "application/json")], content)
+            }),
+        );
 
     // Create the main router with API routes and Dioxus app
     // Note: public_router is merged first so its routes take precedence
