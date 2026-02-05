@@ -83,9 +83,14 @@ pub fn HackathonMessages(slug: String) -> Element {
     // (no action buttons or comment box for requests/invites)
     let dropdown_options = vec![
         DropdownOption {
-            label: "All".into(),
-            value: "all".into(),
+            label: "All Messages".into(),
+            value: "all messages".into(),
             selected: true,
+        },
+        DropdownOption {
+            label: "Announcements".into(),
+            value: "announcements".into(),
+            selected: false,
         },
         DropdownOption {
             label: "Team".into(),
@@ -93,8 +98,8 @@ pub fn HackathonMessages(slug: String) -> Element {
             selected: false,
         },
         DropdownOption {
-            label: "Mine".into(),
-            value: "mine".into(),
+            label: "Individual".into(),
+            value: "individual".into(),
             selected: false,
         },
     ];
@@ -163,20 +168,43 @@ pub fn HackathonMessages(slug: String) -> Element {
 
     // compute filtered items (index into original items, item) and selected index
     let search_lc = search.read().to_lowercase();
-    let filtered_items: Vec<(usize, MessageItem)> = items
-        .read()
-        .iter()
-        .enumerate()
-        .filter_map(|(i, it)| {
-            let hay =
-                format!("{} {} {} {}", it.title, it.sender, it.tag, it.content).to_lowercase();
-            if search_lc.is_empty() || hay.contains(&search_lc) {
-                Some((i, it.clone()))
-            } else {
-                None
-            }
-        })
-        .collect();
+    let filtered_items = {
+        let filter_vals = filter_values.read().clone();
+        let search_q = search.read().to_lowercase();
+        items
+            .read()
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| {
+                if !search_q.is_empty() {
+                    let hay =
+                        format!("{} {} {}", item.title, item.sender, item.content).to_lowercase();
+                    if !hay.contains(&search_q) {
+                        return false;
+                    }
+                }
+
+                if filter_vals.is_empty() || filter_vals.contains(&"all".to_string()) {
+                    return true;
+                }
+
+                if filter_vals.contains(&"announcements".to_string()) {
+                    return item.tag.to_lowercase() == "all";
+                }
+
+                if filter_vals.contains(&"team".to_string()) {
+                    return item.tag.to_lowercase() == "your team";
+                }
+
+                if filter_vals.contains(&"individual".to_string()) {
+                    return item.tag.to_lowercase() == "private";
+                }
+
+                true
+            })
+            .map(|(i, it)| (i, it.clone()))
+            .collect::<Vec<(usize, MessageItem)>>()
+    };
 
     let selected_idx_opt = selected.read().as_ref().copied();
 
