@@ -394,7 +394,7 @@ fn EventBlock(
             "hacking" => "bg-blue-600",
             "speaker" => "bg-purple-600",
             "sponsor" => "bg-amber-500",
-            "food" => "bg-orange-500",
+            "food" => "bg-red-500",
             _ => "bg-green-600", // default
         }
     } else {
@@ -403,7 +403,7 @@ fn EventBlock(
             "hacking" => "bg-blue-50",
             "speaker" => "bg-purple-50",
             "sponsor" => "bg-amber-50",
-            "food" => "bg-orange-50",
+            "food" => "bg-red-50",
             _ => "bg-green-50", // default
         }
     };
@@ -456,15 +456,17 @@ fn EventBlock(
 
     rsx! {
         div {
-            class: "absolute flex flex-col gap-1.5 rounded-xl p-3 overflow-hidden {bg_color} {cursor_class}",
+            class: "absolute flex flex-col gap-0 rounded-xl px-2 py-1 overflow-hidden {bg_color} {cursor_class}",
             style: "top: {top}px; height: {height}px; left: {left_percent}%; width: {width_percent}%; z-index: {z_index};",
             onclick: move |_| {
                 on_click.call(event_for_click.clone());
             },
-            p { class: "text-base font-medium text-foreground-neutral-primary truncate",
+            p { class: "text-sm leading-none font-medium text-foreground-neutral-primary truncate mb-0.5",
                 "{event.name}"
             }
-            p { class: "text-base text-foreground-neutral-primary truncate", "{time_str}" }
+            if height >= 40.0 {
+                p { class: "text-sm leading-none text-foreground-neutral-primary truncate", "{time_str}" }
+            }
         }
     }
 }
