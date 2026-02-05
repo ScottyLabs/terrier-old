@@ -66,7 +66,7 @@ pub fn HackathonMessages(slug: String) -> Element {
         (MessagesTab::Announcements, "Announcements".to_string()),
         (MessagesTab::ReviewDrafts, "Team Requests".to_string()),
     ];
-    let search = use_signal(|| String::new());
+    let mut search_query = use_signal(|| String::new());
     let items: Signal<Vec<MessageItem>> = use_signal(|| Vec::new());
     let selected: Signal<Option<usize>> = use_signal(|| None);
 
@@ -167,10 +167,10 @@ pub fn HackathonMessages(slug: String) -> Element {
     });
 
     // compute filtered items (index into original items, item) and selected index
-    let search_lc = search.read().to_lowercase();
+    let search_lc = search_query.read().to_lowercase();
     let filtered_items = {
         let filter_vals = filter_values.read().clone();
-        let search_q = search.read().to_lowercase();
+        let search_q = search_query.read().to_lowercase();
         items
             .read()
             .iter()
@@ -589,9 +589,9 @@ pub fn HackathonMessages(slug: String) -> Element {
     }
 
     rsx! {
-        div { class: "pt-11 pb-7 bg-[#f5f7f9] min-h-screen",
+        div { class: "flex flex-col h-full md:px-0",
             div { class: "flex items-center justify-between",
-                h1 { class: "text-[30px] font-semibold leading-[38px] text-foreground-neutral-primary",
+                h1 { class: "text-2xl md:text-[30px] font-semibold leading-8 md:leading-[38px] text-foreground-neutral-primary pt-6 md:pt-11 pb-4 md:pb-7",
                     "Messages"
                 }
 
@@ -600,7 +600,6 @@ pub fn HackathonMessages(slug: String) -> Element {
                     if is_admin {
                         ButtonWithIcon {
                             icon: LdPlus,
-                            variant: ButtonVariant::Outline,
                             size: ButtonSize::Normal,
                             class: "",
                             onclick: move |_| compose_open.set(true),
@@ -611,21 +610,30 @@ pub fn HackathonMessages(slug: String) -> Element {
             }
 
             // Tab switcher (Announcements / Team Requests)
-            div { class: "mt-4",
+            div { class: "mb-4 md:mb-6",
                 TabSwitcher { active_tab, tabs }
             }
-
-            div { class: "mt-6 w-full bg-white rounded-[16px] shadow p-8 flex gap-6",
+            div { class: "bg-background-neutral-primary rounded-[20px] flex p-5 overflow-y-auto",
+            //div { class: "mt-6 w-full bg-white rounded-[16px] shadow p-8 flex gap-6",
                 // Left column
                 div { class: "w-[260px]",
-                    div { class: "flex items-center gap-3",
-                        Input {
-                            label: "",
-                            placeholder: Some("Search".into()),
-                            value: search.clone(),
-                            height: crate::ui::foundation::components::InputHeight::Default,
-                        }
+                    // Search bar
+                    div { class: "w-full md:w-[405px] h-10 border border-stroke-neutral-1 rounded-full flex items-center px-3 py-1",
+                            Icon {
+                                width: 20,
+                                height: 20,
+                                icon: LdSearch,
+                                class: "text-foreground-neutral-tertiary",
+                            }
+                            input {
+                                class: "flex-1 px-2.5 text-sm leading-5 text-foreground-neutral-tertiary outline-none bg-transparent",
+                                placeholder: "Search messages",
+                                r#type: "text",
+                                value: "{search_query}",
+                                oninput: move |e| search_query.set(e.value()),
+                            }
                     }
+                    // Filter button
                     div { class: "mt-4",
                         div { class: "relative",
                             button {
