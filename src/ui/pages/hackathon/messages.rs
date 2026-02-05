@@ -777,7 +777,7 @@ pub fn HackathonMessages(slug: String) -> Element {
                                                 class: "absolute z-20 bg-white border border-stroke-neutral-1 rounded mt-1 w-[320px] max-h-64 overflow-auto shadow-lg",
                                                 // All option
                                                 div {
-                                                    class: "px-3 py-2 hover:bg-background-neutral-secondary-enabled cursor-pointer",
+                                                    class: "px-3 py-2 bg-background-neutral-primary hover:bg-background-neutral-secondary-enabled cursor-pointer",
                                                     onclick: move |_| {
                                                         selected_recipient.set(Some(("all".to_string(), None)));
                                                         new_recipients_display.set("All".to_string());
@@ -787,7 +787,7 @@ pub fn HackathonMessages(slug: String) -> Element {
                                                 }
 
                                                 // People section header
-                                                div { class: "px-3 pt-2 pb-1 text-xs font-semibold text-foreground-neutral-primary",
+                                                div { class: "px-3 p-2 text-xs font-bold bg-background-neutral-primary text-foreground-neutral-primary",
                                                     "People"
                                                 }
 
@@ -796,7 +796,7 @@ pub fn HackathonMessages(slug: String) -> Element {
                                                         || label_text.to_lowercase().starts_with(&recipients_search_lc)
                                                     {
                                                         div {
-                                                            class: "px-3 py-2 hover:bg-background-neutral-secondary-enabled cursor-pointer bg-yellow-50 text-foreground-neutral-primary",
+                                                            class: "px-3 py-2 bg-background-neutral-primary hover:bg-background-neutral-secondary-enabled cursor-pointer text-foreground-neutral-primary",
                                                             onclick: move |_| {
                                                                 selected_recipient.set(Some(("user".to_string(), Some(user_id))));
                                                                 new_recipients_display.set(label_for_click.clone());
@@ -808,7 +808,7 @@ pub fn HackathonMessages(slug: String) -> Element {
                                                 }
 
                                                 // Teams section header
-                                                div { class: "px-3 pt-2 pb-1 text-xs font-semibold text-foreground-neutral-primary",
+                                                div { class: "px-3 p-2 text-xs font-bold bg-background-neutral-primary font-semibold text-foreground-neutral-primary",
                                                     "Teams"
                                                 }
                                                 for (label_text , label_for_click , tid) in teams_dropdown_entries.clone().into_iter() {
@@ -816,7 +816,7 @@ pub fn HackathonMessages(slug: String) -> Element {
                                                         || label_text.to_lowercase().starts_with(&recipients_search_lc)
                                                     {
                                                         div {
-                                                            class: "px-3 py-2 hover:bg-background-neutral-secondary-enabled cursor-pointer",
+                                                            class: "px-3 py-2 bg-background-neutral-primary hover:bg-background-neutral-secondary-enabled cursor-pointer",
                                                             onclick: move |_| {
                                                                 selected_recipient.set(Some(("team".to_string(), tid)));
                                                                 new_recipients_display.set(label_for_click.clone());
