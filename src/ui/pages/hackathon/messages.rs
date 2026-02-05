@@ -964,11 +964,6 @@ pub fn HackathonMessages(slug: String) -> Element {
                                         p { class: "text-sm text-foreground-neutral-secondary",
                                             {sender_time_text.as_deref().unwrap()}
                                         }
-                                        if selected_team_name.is_some() {
-                                            p { class: "text-sm text-foreground-neutral-secondary",
-                                                {selected_team_name.as_deref().unwrap()}
-                                            }
-                                        }
                                     }
                                 }
 
