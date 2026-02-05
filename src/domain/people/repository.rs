@@ -150,31 +150,40 @@ impl<'a> UserRoleRepository<'a> {
         // Apply search filter
         if let Some(search_term) = search {
             if !search_term.is_empty() {
-                let lower_search = search_term.to_lowercase();
-                query = query.filter(
-                    Condition::any()
-                        .add(
-                            Expr::expr(Func::lower(Expr::col((
-                                users::Entity,
-                                users::Column::Name,
-                            ))))
-                            .like(format!("%{}%", lower_search)),
-                        )
-                        .add(
-                            Expr::expr(Func::lower(Expr::col((
-                                users::Entity,
-                                users::Column::Email,
-                            ))))
-                            .like(format!("%{}%", lower_search)),
-                        )
-                        .add(
-                            Expr::expr(Func::lower(Expr::col((
-                                user_hackathon_roles::Entity,
-                                user_hackathon_roles::Column::Role,
-                            ))))
-                            .like(format!("%{}%", lower_search)),
-                        ),
-                );
+                let terms: Vec<String> = search_term
+                    .split(',')
+                    .map(|s| s.trim().to_lowercase())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+
+                if !terms.is_empty() {
+                    let mut search_condition = Condition::any();
+                    for term in terms {
+                        search_condition = search_condition
+                            .add(
+                                Expr::expr(Func::lower(Expr::col((
+                                    users::Entity,
+                                    users::Column::Name,
+                                ))))
+                                .like(format!("%{}%", term)),
+                            )
+                            .add(
+                                Expr::expr(Func::lower(Expr::col((
+                                    users::Entity,
+                                    users::Column::Email,
+                                ))))
+                                .like(format!("%{}%", term)),
+                            )
+                            .add(
+                                Expr::expr(Func::lower(Expr::col((
+                                    user_hackathon_roles::Entity,
+                                    user_hackathon_roles::Column::Role,
+                                ))))
+                                .like(format!("%{}%", term)),
+                            );
+                    }
+                    query = query.filter(search_condition);
+                }
             }
         }
 
