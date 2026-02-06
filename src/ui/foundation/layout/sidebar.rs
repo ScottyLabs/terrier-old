@@ -12,10 +12,33 @@ use crate::{
         HackathonRoleType, JUDGE_ROLES, JUDGING_ADMIN_ROLES, PEOPLE_ROLES, PRIZE_TRACKS_ROLES,
         RESULTS_ROLES, SCHEDULE_ROLES, SETTINGS_ROLES, SUBMISSION_ROLES, TEAM_ROLES, has_access,
     },
-    domain::applications::handlers::get_application,
+    domain::{applications::handlers::get_application, meta::handlers::get_public_config},
     ui::foundation::components::{Header, HeaderSize},
 };
 // SidebarItem is defined below in this file
+
+#[component]
+pub fn ExternalSidebarItem<I: IconShape + Clone + PartialEq + 'static>(
+    label: String,
+    icon: I,
+    href: String,
+) -> Element {
+    rsx! {
+        a { class: "block w-full", href: "{href}", target: "_blank",
+            div { class: "bg-background-neutral-primary flex gap-2.5 items-center px-3 py-2 rounded-[24px] w-full cursor-pointer",
+                Icon {
+                    width: 20,
+                    height: 20,
+                    icon,
+                    class: "text-foreground-neutral-primary",
+                }
+                p { class: "font-semibold text-sm leading-5 text-foreground-neutral-primary whitespace-nowrap",
+                    "{label}"
+                }
+            }
+        }
+    }
+}
 
 /// Shared navigation items component to avoid duplication between mobile and desktop
 #[component]
@@ -35,6 +58,8 @@ fn NavItems(
     has_results: bool,
     has_settings: bool,
     include_settings_in_nav: bool,
+    oidc_issuer: Option<String>,
+    include_account_in_nav: bool,
     on_item_click: Option<EventHandler<()>>,
 ) -> Element {
     let handle_click = move |_| {
@@ -178,6 +203,17 @@ fn NavItems(
                 }
             }
         }
+        if let Some(oidc_issuer) = oidc_issuer {
+             if include_account_in_nav {
+                div { onclick: handle_click,
+                    ExternalSidebarItem {
+                        label: "Manage Account".to_string(),
+                        icon: LdUser,
+                        href: format!("{}/account", oidc_issuer),
+                    }
+                }
+            }
+        }
         if has_settings && include_settings_in_nav {
             div { onclick: handle_click,
                 SidebarItem {
@@ -214,6 +250,12 @@ pub fn Sidebar(
         let _ = application_refresh_trigger.read();
         async move { get_application(slug).await.ok() }
     });
+
+    let public_config = use_server_future(get_public_config)?;
+    let oidc_issuer = match &*public_config.read() {
+        Some(Ok(config)) => config.oidc_issuer.clone(),
+        _ => None,
+    };
 
     let mut menu_open = use_signal(|| false);
 
@@ -291,6 +333,8 @@ pub fn Sidebar(
                             has_results,
                             has_settings,
                             include_settings_in_nav: true,
+                            oidc_issuer: oidc_issuer.clone(),
+                            include_account_in_nav: true,
                             on_item_click: move |_| menu_open.set(false),
                         }
                     }
@@ -327,12 +371,21 @@ pub fn Sidebar(
                         has_results,
                         has_settings,
                         include_settings_in_nav: false,
+                        oidc_issuer: oidc_issuer.clone(),
+                        include_account_in_nav: false,
                         on_item_click: None,
                     }
                 }
 
-                if has_settings {
-                    div { class: "mt-auto w-full",
+                div { class: "mt-auto w-full flex flex-col gap-1",
+                    if let Some(oidc_issuer) = oidc_issuer {
+                        ExternalSidebarItem {
+                            label: "Manage Account".to_string(),
+                            icon: LdUser,
+                            href: format!("{}/account", oidc_issuer),
+                        }
+                    }
+                    if has_settings {
                         SidebarItem {
                             label: "Settings".to_string(),
                             icon: LdSettings,
