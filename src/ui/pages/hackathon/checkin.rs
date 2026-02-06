@@ -19,6 +19,7 @@ use crate::{
         remove_self_checkin, self_checkin,
     },
     domain::hackathons::types::{HackathonInfo, ScheduleEvent},
+    domain::people::handlers::{HackathonPerson, get_hackathon_people},
     ui::features::checkin::QRScannerModal,
     ui::features::dashboard::QRModal,
     ui::foundation::utils::generate_qr_svg,
@@ -596,16 +597,38 @@ fn EventCategorySection(
 }
 
 /// Event detail panel for organizer
+// Event detail panel for organizer
 #[component]
 fn EventDetailPanel(slug: String, event: ScheduleEvent, on_refresh: EventHandler<()>) -> Element {
     let slug_for_attendees = slug.clone();
     let slug_for_scanner = slug.clone();
+    let slug_for_search = slug.clone();
+    let slug_for_checkin = slug.clone();
     let nav = use_navigator();
     let event_id = event.id;
 
     // Participant ID input
     let mut participant_id_input = use_signal(|| String::new());
     let mut search_query = use_signal(|| String::new());
+
+    // Check-in search state
+    let mut checkin_focused = use_signal(|| false);
+
+    // Resource for searching people to check in
+    let mut checkin_search_results = use_resource(move || {
+        let slug = slug_for_search.clone();
+        let query = participant_id_input();
+        async move {
+            if query.len() < 2 {
+                return Vec::new();
+            }
+            // Search for participants
+            match get_hackathon_people(slug, Some(0), Some(5), Some(query), None).await {
+                Ok(res) => res.people,
+                Err(_) => Vec::new(),
+            }
+        }
+    });
 
     // QR Scanner modal state
     let mut show_qr_scanner = use_signal(|| false);
@@ -640,6 +663,59 @@ fn EventDetailPanel(slug: String, event: ScheduleEvent, on_refresh: EventHandler
         }
     }));
 
+    // Common check-in logic
+    let perform_checkin =
+        move |user_id: i32, participant_name: Option<String>, participant_email: Option<String>| {
+            let slug = slug_for_checkin.clone();
+            let refresh = on_refresh.clone();
+            let should_skip = skip_confirmation();
+
+            spawn(async move {
+                if should_skip {
+                    // Skip confirmation, check in directly
+                    match organizer_checkin(slug, event_id, user_id).await {
+                        Ok(()) => {
+                            refresh.call(());
+                            attendees_resource.restart();
+                            participant_id_input.set(String::new());
+                        }
+                        Err(e) => {
+                            let error_str = e.to_string();
+                            if error_str.contains("ALREADY_CHECKED_IN") {
+                                error_message.set(Some(
+                                    "This participant has already been checked in to this event."
+                                        .to_string(),
+                                ));
+                            } else {
+                                error_message.set(Some(format!("Check-in failed: {}", error_str)));
+                            }
+                        }
+                    }
+                } else {
+                    // If we have name/email, we can skip fetching info
+                    if let (Some(name), Some(email)) = (participant_name, participant_email) {
+                        pending_participant.set(Some(ParticipantInfo {
+                            user_id,
+                            name,
+                            email,
+                        }));
+                    } else {
+                        is_confirming.set(true);
+                        if let Ok(info) = get_participant_info(slug, user_id).await {
+                            pending_participant.set(Some(info));
+                        } else {
+                            pending_participant.set(Some(ParticipantInfo {
+                                user_id,
+                                name: "Unknown User".to_string(),
+                                email: String::new(),
+                            }));
+                        }
+                        is_confirming.set(false);
+                    }
+                }
+            });
+        };
+
     let is_loading = attendees_resource.read().is_none();
     let attendees = attendees_resource.read().clone().unwrap_or_default();
 
@@ -654,6 +730,9 @@ fn EventDetailPanel(slug: String, event: ScheduleEvent, on_refresh: EventHandler
         })
         .cloned()
         .collect();
+
+    let perform_checkin_keyup = perform_checkin.clone();
+    let perform_checkin_go = perform_checkin.clone();
 
     rsx! {
         div { class: "bg-background-neutral-primary rounded-[20px] p-6 flex flex-col h-full",
@@ -684,70 +763,72 @@ fn EventDetailPanel(slug: String, event: ScheduleEvent, on_refresh: EventHandler
                     span { class: "text-foreground-neutral-primary", "Scan QR code" }
                 }
 
-                // Manual ID entry
-                div { class: "flex gap-2",
-                    input {
-                        r#type: "text",
-                        class: "flex-1 px-4 py-2 rounded-xl border border-stroke-neutral-1 bg-background-neutral-secondary text-foreground-neutral-primary placeholder:text-foreground-neutral-tertiary",
-                        placeholder: "Enter participant ID here...",
-                        value: "{participant_id_input}",
-                        oninput: move |e| participant_id_input.set(e.value()),
-                    }
-                    button {
-                        class: "px-4 py-2 rounded-xl bg-foreground-neutral-primary text-white font-medium",
-                        onclick: move |_| {
-                            let slug = slug.clone();
-                            let id_str = participant_id_input();
-                            let refresh = on_refresh.clone();
-                            let should_skip = skip_confirmation();
+                // Search / Manual ID entry
+                div { class: "flex gap-2 relative",
+                    div { class: "flex-1 relative",
+                        input {
+                            r#type: "text",
+                            class: "w-full px-4 py-2 rounded-xl border border-stroke-neutral-1 bg-background-neutral-secondary text-foreground-neutral-primary placeholder:text-foreground-neutral-tertiary outline-none focus:border-foreground-neutral-primary transition-colors",
+                            placeholder: "Search name or enter ID...",
+                            value: "{participant_id_input}",
+                            oninput: move |e| participant_id_input.set(e.value()),
+                            onfocus: move |_| checkin_focused.set(true),
+                            onblur: move |_| {
+                                // Delay hiding dropdown so clicks can register
+                                spawn(async move {
+                                    gloo_timers::future::TimeoutFuture::new(200).await;
+                                    checkin_focused.set(false);
+                                });
+                            },
+                            onkeyup: move |e| {
+                                if e.key().to_string() == "Enter" {
+                                    if let Ok(user_id) = participant_id_input().trim().parse::<i32>() {
+                                        perform_checkin_keyup(user_id, None, None);
+                                    }
+                                }
+                            }
+                        }
 
-                            if let Ok(user_id) = id_str.parse::<i32>() {
-                                if should_skip {
-                                    // Skip confirmation, check in directly
-                                    spawn(async move {
-                                        match organizer_checkin(slug, event_id, user_id).await {
-                                            Ok(()) => {
-                                                refresh.call(());
-                                                attendees_resource.restart();
-                                            }
-                                            Err(e) => {
-                                                let error_str = e.to_string();
-                                                if error_str.contains("ALREADY_CHECKED_IN") {
-                                                    error_message
-                                                        .set(
-                                                            // Show confirmation modal
-                                                            Some(
-                                                                // User not found, check in anyway
-                                                                "This participant has already been checked in to this event."
-                                                                    .to_string(),
-                                                            ),
-                                                        );
-                                                } else {
-                                                    error_message
-                                                        .set(Some(format!("Check-in failed: {}", error_str)));
+                        // Search results dropdown
+                        if checkin_focused() && !participant_id_input().is_empty() {
+                            if let Some(people) = checkin_search_results.read().as_ref() {
+                                if !people.is_empty() {
+                                    div { class: "absolute top-full left-0 right-0 mt-2 bg-background-neutral-primary border border-stroke-neutral-1 rounded-xl shadow-lg z-20 max-h-60 overflow-y-auto",
+                                        for person in people {
+                                            {
+                                                let person_clone = person.clone();
+                                                let perform_checkin = perform_checkin.clone();
+                                                rsx! {
+                                                    button {
+                                                        class: "w-full text-left px-4 py-3 hover:bg-background-neutral-secondary transition-colors border-b border-stroke-neutral-1 last:border-0",
+                                                        onclick: move |_| {
+                                                            perform_checkin(
+                                                                person_clone.user_id,
+                                                                person_clone.name.clone(),
+                                                                Some(person_clone.email.clone())
+                                                            );
+                                                        },
+                                                        div { class: "font-medium text-foreground-neutral-primary",
+                                                            "{person.name.clone().unwrap_or_else(|| \"Unknown\".to_string())}"
+                                                        }
+                                                        div { class: "text-xs text-foreground-neutral-tertiary",
+                                                            "{person.email}"
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
-                                    });
-                                    participant_id_input.set(String::new());
-                                } else {
-                                    is_confirming.set(true);
-                                    spawn(async move {
-                                        if let Ok(info) = get_participant_info(slug, user_id).await {
-                                            pending_participant.set(Some(info));
-                                        } else {
-                                            pending_participant
-                                                .set(
-                                                    Some(ParticipantInfo {
-                                                        user_id,
-                                                        name: "Unknown User".to_string(),
-                                                        email: String::new(),
-                                                    }),
-                                                );
-                                        }
-                                        is_confirming.set(false);
-                                    });
+                                    }
                                 }
+                            }
+                        }
+                    }
+
+                    button {
+                        class: "px-4 py-2 rounded-xl bg-foreground-neutral-primary text-white font-medium",
+                        onclick: move |_| {
+                            if let Ok(user_id) = participant_id_input().trim().parse::<i32>() {
+                                perform_checkin_go(user_id, None, None);
                             }
                         },
                         if is_confirming() {

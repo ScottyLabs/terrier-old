@@ -11,7 +11,8 @@ use crate::{
     domain::judging::handlers::get_features,
     domain::prizes::handlers::{
         CreatePrizeRequest, PrizeFeatureWeightInfo, PrizeInfo, UpdatePrizeFeatureWeightsRequest,
-        create_prize, delete_prize, get_prizes, update_prize_feature_weights,
+        UpdatePrizeRequest, create_prize, delete_prize, get_prizes, update_prize,
+        update_prize_feature_weights,
     },
     ui::{
         features::prizes::PrizeCard,
@@ -45,6 +46,14 @@ pub fn HackathonPrizeTracks(slug: String) -> Element {
     let mut show_add_feature = use_signal(|| false);
     let mut weight_error = use_signal(|| None::<String>);
 
+    // State for editing prize details
+    let mut is_editing = use_signal(|| false);
+    let mut edit_name = use_signal(String::new);
+    let mut edit_description = use_signal(String::new);
+    let mut edit_image_url = use_signal(String::new);
+    let mut edit_category = use_signal(String::new);
+    let mut edit_value = use_signal(String::new);
+
     // Reset weights when prize is selected
     use_effect(move || {
         if let Some(prize) = selected_prize() {
@@ -55,8 +64,25 @@ pub fn HackathonPrizeTracks(slug: String) -> Element {
             editing_required_events.set(Vec::new());
             weight_error.set(None);
             show_add_feature.set(false);
+            is_editing.set(false);
         }
     });
+
+    let mut start_editing = move || {
+        if let Some(prize) = selected_prize() {
+            edit_name.set(prize.name.clone());
+            edit_description.set(prize.description.clone().unwrap_or_default());
+            edit_image_url.set(prize.image_url.clone().unwrap_or_default());
+            edit_category.set(prize.category.clone().unwrap_or_default());
+            edit_value.set(prize.value.clone());
+            is_editing.set(true);
+        }
+    };
+
+    let mut cancel_editing = move || {
+        is_editing.set(false);
+        weight_error.set(None);
+    };
 
     // Fetch prizes
     let mut prizes_resource = use_resource({
@@ -358,49 +384,146 @@ pub fn HackathonPrizeTracks(slug: String) -> Element {
 
 
                         div { class: "p-7",
-                            if let Some(img_url) = &prize.image_url {
-                                div { class: "mb-4 rounded-lg overflow-hidden",
-                                    img {
-                                        src: "{img_url}",
-                                        alt: "{prize.name}",
-                                        class: "w-full h-48 object-cover",
-                                    }
-                                }
-                            }
-
-                            div { class: "flex justify-between items-start mb-2",
-                                h2 { class: "text-2xl font-semibold text-foreground-neutral-primary", "{prize.name}" }
-                                Button {
-                                    variant: ButtonVariant::Danger,
-                                    size: ButtonSize::Compact,
-                                    onclick: {
+                            if is_editing() {
+                                form {
+                                    class: "flex flex-col gap-4 mb-6",
+                                    onsubmit: {
                                         let slug = slug.clone();
-                                        move |_| {
+                                        move |evt: FormEvent| {
+                                            evt.prevent_default();
                                             let slug = slug.clone();
                                             spawn(async move {
-                                                if delete_prize(slug, prize_id).await.is_ok() {
-                                                    selected_prize.set(None);
-                                                    prizes_resource.restart();
+                                                let request = UpdatePrizeRequest {
+                                                    name: Some(edit_name()),
+                                                    description: Some(edit_description()),
+                                                    image_url: Some(edit_image_url()),
+                                                    category: Some(edit_category()),
+                                                    value: Some(edit_value()),
+                                                    required_event_ids: None, // Handle separately
+                                                };
+
+                                                match update_prize(slug.clone(), prize_id, request).await {
+                                                    Ok(updated_prize) => {
+                                                        // Update local state
+                                                        selected_prize.set(Some(updated_prize));
+                                                        prizes_resource.restart();
+                                                        is_editing.set(false);
+                                                    }
+                                                    Err(e) => {
+                                                        weight_error.set(Some(e.to_string()));
+                                                    }
                                                 }
                                             });
                                         }
                                     },
-                                    "Delete Prize"
+                                    div { class: "flex flex-col gap-2",
+                                        label { class: "text-sm font-medium text-foreground-neutral-primary", "Name *" }
+                                        input {
+                                            class: "px-4 h-12 bg-background-neutral-secondary text-foreground-neutral-primary text-sm rounded-[0.625rem] border border-border-neutral-primary",
+                                            required: true,
+                                            value: "{edit_name}",
+                                            oninput: move |e| edit_name.set(e.value()),
+                                        }
+                                    }
+                                    div { class: "flex flex-col gap-2",
+                                        label { class: "text-sm font-medium text-foreground-neutral-primary", "Description" }
+                                        textarea {
+                                            class: "px-4 py-3 bg-background-neutral-secondary text-foreground-neutral-primary text-sm rounded-[0.625rem] border border-border-neutral-primary min-h-[100px]",
+                                            value: "{edit_description}",
+                                            oninput: move |e| edit_description.set(e.value()),
+                                        }
+                                    }
+                                    div { class: "flex flex-col gap-2",
+                                        label { class: "text-sm font-medium text-foreground-neutral-primary", "Category" }
+                                        input {
+                                            class: "px-4 h-12 bg-background-neutral-secondary text-foreground-neutral-primary text-sm rounded-[0.625rem] border border-border-neutral-primary",
+                                            value: "{edit_category}",
+                                            oninput: move |e| edit_category.set(e.value()),
+                                        }
+                                    }
+                                    div { class: "flex flex-col gap-2",
+                                        label { class: "text-sm font-medium text-foreground-neutral-primary", "Value *" }
+                                        input {
+                                            class: "px-4 h-12 bg-background-neutral-secondary text-foreground-neutral-primary text-sm rounded-[0.625rem] border border-border-neutral-primary",
+                                            required: true,
+                                            value: "{edit_value}",
+                                            oninput: move |e| edit_value.set(e.value()),
+                                        }
+                                    }
+                                    div { class: "flex flex-col gap-2",
+                                        label { class: "text-sm font-medium text-foreground-neutral-primary", "Image URL" }
+                                        input {
+                                            class: "px-4 h-12 bg-background-neutral-secondary text-foreground-neutral-primary text-sm rounded-[0.625rem] border border-border-neutral-primary",
+                                            r#type: "url",
+                                            value: "{edit_image_url}",
+                                            oninput: move |e| edit_image_url.set(e.value()),
+                                        }
+                                    }
+                                    div { class: "flex gap-3 justify-end mt-2",
+                                        Button {
+                                            variant: ButtonVariant::Tertiary,
+                                            button_type: "button".to_string(),
+                                            onclick: move |_| cancel_editing(),
+                                            "Cancel"
+                                        }
+                                        Button { button_type: "submit".to_string(), "Save Changes" }
+                                    }
                                 }
-                            }
-
-                            if let Some(cat) = &prize.category {
-                                span { class: "inline-block px-3 py-1 bg-background-neutral-secondary text-foreground-neutral-secondary text-sm rounded-full mb-4",
-                                    "{cat}"
+                            } else {
+                                div { class: "contents",
+                                    if let Some(img_url) = &prize.image_url {
+                                        div { class: "mb-4 rounded-lg overflow-hidden",
+                                        img {
+                                            src: "{img_url}",
+                                            alt: "{prize.name}",
+                                            class: "w-full h-48 object-cover",
+                                        }
+                                    }
                                 }
-                            }
 
-                            div { class: "mb-4",
-                                p { class: "text-lg font-medium text-foreground-brand-primary", "{prize.value}" }
-                            }
+                                div { class: "flex justify-between items-start mb-2",
+                                    h2 { class: "text-2xl font-semibold text-foreground-neutral-primary", "{prize.name}" }
+                                    div { class: "flex gap-2",
+                                        Button {
+                                            size: ButtonSize::Compact,
+                                            variant: ButtonVariant::Secondary,
+                                            onclick: move |_| start_editing(),
+                                            "Edit"
+                                        }
+                                        Button {
+                                            variant: ButtonVariant::Danger,
+                                            size: ButtonSize::Compact,
+                                            onclick: {
+                                                let slug = slug.clone();
+                                                move |_| {
+                                                    let slug = slug.clone();
+                                                    spawn(async move {
+                                                        if delete_prize(slug, prize_id).await.is_ok() {
+                                                            selected_prize.set(None);
+                                                            prizes_resource.restart();
+                                                        }
+                                                    });
+                                                }
+                                            },
+                                            "Delete Prize"
+                                        }
+                                    }
+                                }
 
-                            if let Some(desc) = &prize.description {
-                                p { class: "text-foreground-neutral-secondary mb-6", "{desc}" }
+                                if let Some(cat) = &prize.category {
+                                    span { class: "inline-block px-3 py-1 bg-background-neutral-secondary text-foreground-neutral-secondary text-sm rounded-full mb-4",
+                                        "{cat}"
+                                    }
+                                }
+
+                                div { class: "mb-4",
+                                    p { class: "text-lg font-medium text-foreground-brand-primary", "{prize.value}" }
+                                }
+
+                                    if let Some(desc) = &prize.description {
+                                        p { class: "text-foreground-neutral-secondary mb-6", "{desc}" }
+                                    }
+                                }
                             }
 
                             hr { class: "border-border-neutral-tertiary my-6" }
@@ -463,8 +586,7 @@ pub fn HackathonPrizeTracks(slug: String) -> Element {
                                                     // So we just pass required_event_ids.
 
                                                     // Wait, we need to import update_prize
-                                                    use crate::domain::prizes::handlers::update_prize;
-
+                                                    // update_prize assumes top-level import now
                                                     match update_prize(
                                                         slug,
                                                         prize_id,

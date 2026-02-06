@@ -22,12 +22,12 @@ pub fn QRScannerModal(
     let mut is_scanning = use_signal(|| false);
     let mut error_message: Signal<Option<String>> = use_signal(|| None);
     let mut success_message: Signal<Option<String>> = use_signal(|| None);
-    let mut scan_complete = use_signal(|| false);
 
     // Main scanning effect using dioxus.send for JS->Rust communication
     let slug_for_scan = slug.clone();
     use_future(move || {
         let slug = slug_for_scan.clone();
+
         async move {
             is_scanning.set(true);
 
@@ -48,8 +48,13 @@ pub fn QRScannerModal(
                         // Cleanup any existing scanner
                         if (window.html5QrCodeScanner) {
                             try {
+                                console.log("Stopping scanner by eval");
                                 await window.html5QrCodeScanner.stop();
-                            } catch (e) {}
+                            } catch (e) {
+                                console.error("Error stopping existing scanner:", e);
+                            }
+                        } else {
+                            console.log("No existing scanner found during init");
                         }
                         
                         window.html5QrCodeScanner = new Html5Qrcode('qr-reader');
@@ -80,12 +85,13 @@ pub fn QRScannerModal(
 
             // Wait for messages from JavaScript
             loop {
-                if scan_complete() {
-                    break;
-                }
-
                 match eval.recv::<serde_json::Value>().await {
                     Ok(msg) => {
+                        // Ignore scans if we are already showing success message
+                        if success_message().is_some() {
+                            continue;
+                        }
+
                         dioxus_logger::tracing::info!("Received from JS: {:?}", msg);
 
                         if let Some(error) = msg.get("error").and_then(|e| e.as_str()) {
@@ -112,31 +118,15 @@ pub fn QRScannerModal(
                                             user_id
                                         );
 
-                                        // Stop the scanner
-                                        let _ = dioxus::document::eval(
-                                            r#"
-                                            (async function() {
-                                                if (window.html5QrCodeScanner) {
-                                                    try {
-                                                        await window.html5QrCodeScanner.stop();
-                                                    } catch (e) {}
-                                                }
-                                            })()
-                                            "#,
-                                        )
-                                        .await;
+                                        // DO NOT Stop the scanner - keep it running for next person
 
-                                        scan_complete.set(true);
                                         success_message.set(Some(format!(
                                             "User {} checked in successfully!",
                                             user_id
                                         )));
                                         on_checkin_success.call(());
 
-                                        // Auto-close after a brief delay to show success
-                                        gloo_timers::future::TimeoutFuture::new(1500).await;
-                                        on_close.call(());
-                                        break;
+                                        // Loop continues to allow next scan
                                     }
                                     Err(e) => {
                                         let error_str = e.to_string();
@@ -175,15 +165,37 @@ pub fn QRScannerModal(
     });
 
     // Cleanup function
-    let mut scan_complete_cleanup = scan_complete.clone();
     let cleanup_and_close = move |_| {
-        scan_complete_cleanup.set(true);
         spawn(async move {
             let _ = dioxus::document::eval(
                 r#"
                 (async function() {
                     if (window.html5QrCodeScanner) {
                         try {
+                            console.log("Stopping scanner by cleanup_and_close");
+                            await window.html5QrCodeScanner.stop();
+                            window.html5QrCodeScanner = null;
+                        } catch (e) {
+                            console.error("Failed to stop scanner:", e);
+                        }
+                    }
+                })()
+                "#,
+            )
+            .await;
+            on_close.call(());
+        });
+    };
+
+    // Ensure scanner is stopped when component unmounts
+    use_drop(move || {
+        spawn(async move {
+            let _ = dioxus::document::eval(
+                r#"
+                (async function() {
+                    if (window.html5QrCodeScanner) {
+                        try {
+                            console.log("Stopping scanner by use drop");
                             await window.html5QrCodeScanner.stop();
                             window.html5QrCodeScanner = null;
                         } catch (e) {}
@@ -193,7 +205,13 @@ pub fn QRScannerModal(
             )
             .await;
         });
-        on_close.call(());
+    });
+
+    // Handler for next person button
+    let handle_next_person = move |_| {
+        // Just clear the messages - scanner is still running in background!
+        success_message.set(None);
+        error_message.set(None);
     };
 
     rsx! {
@@ -222,20 +240,25 @@ pub fn QRScannerModal(
                 }
 
                 // Scanner container
-                div {
-                    class: "w-full aspect-square bg-black rounded-2xl overflow-hidden relative",
+                div { class: "w-full aspect-square bg-black rounded-2xl overflow-hidden relative",
                     div { id: "qr-reader", class: "w-full h-full" }
 
                     // Success overlay
                     if success_message().is_some() {
-                        div { class: "absolute inset-0 flex flex-col items-center justify-center bg-green-600/90",
+                        div { class: "absolute inset-0 flex flex-col items-center justify-center bg-green-600/90 p-6 text-center",
                             Icon {
                                 width: 64,
                                 height: 64,
                                 icon: LdCheck,
                                 class: "text-white mb-4",
                             }
-                            p { class: "text-white text-lg font-semibold", "Checked In!" }
+                            p { class: "text-white text-lg font-semibold mb-6", "Checked In!" }
+
+                            button {
+                                class: "w-full py-3 px-4 bg-white text-green-700 font-bold rounded-xl shadow-lg hover:bg-gray-100 transition-colors",
+                                onclick: handle_next_person,
+                                "Next Person"
+                            }
                         }
                     } else if !is_scanning() || error_message().is_some() {
                         div { class: "absolute inset-0 flex items-center justify-center bg-black/50",
