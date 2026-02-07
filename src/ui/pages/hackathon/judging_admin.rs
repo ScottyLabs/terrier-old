@@ -34,7 +34,7 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
     let hackathon = use_context::<Signal<HackathonInfo>>();
     let mut status: Signal<Option<JudgingStatus>> = use_signal(|| None);
     let mut features: Signal<Vec<FeatureInfo>> = use_signal(|| Vec::new());
-    let mut available_users: Signal<Vec<(i32, String)>> = use_signal(|| Vec::new());
+
     let mut loading = use_signal(|| false);
     let mut error_msg: Signal<Option<String>> = use_signal(|| None);
     let mut success_msg: Signal<Option<String>> = use_signal(|| None);
@@ -67,19 +67,6 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
             match get_features(slug.clone()).await {
                 Ok(f) => features.set(f),
                 Err(e) => error_msg.set(Some(format!("Failed to get features: {}", e))),
-            }
-
-            // Fetch available users for judge assignment
-            match get_hackathon_people(slug.clone(), None, None, None, None).await {
-                Ok(response) => {
-                    let user_list: Vec<(i32, String)> = response
-                        .people
-                        .into_iter()
-                        .map(|u: HackathonPerson| (u.user_id, u.name.unwrap_or_else(|| u.email)))
-                        .collect();
-                    available_users.set(user_list);
-                }
-                Err(_) => {} // Silently fail - users just won't be able to add judges
             }
 
             // Fetch prizes with judges
@@ -269,6 +256,30 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
             });
         }
     };
+
+    // Resource for searching judges
+    let mut judges_resource = use_resource(use_reactive(
+        &(slug.clone(), prize_judge_search()),
+        move |(slug, search)| async move {
+            let search_val = if search.trim().is_empty() {
+                None
+            } else {
+                Some(search)
+            };
+            get_hackathon_people(
+                slug,
+                Some(0),
+                Some(20),
+                search_val,
+                Some(vec![
+                    "judge".to_string(),
+                    "organizer".to_string(),
+                    "admin".to_string(),
+                ]),
+            )
+            .await
+        },
+    ));
 
     let mut select_feature = move |feature: FeatureInfo| {
         edit_name.set(feature.name.clone());
@@ -648,6 +659,7 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
 
 
 
+
                                                     if let Some(desc) = &feature.description {
                                                         p { class: "text-sm text-foreground-neutral-secondary line-clamp-3", "{desc}" }
                                                     }
@@ -779,33 +791,6 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                                             show_prize_judge_picker.set(false);
                                                             prize_judge_search.set(String::new());
                                                         },
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
                                                         div { class: "flex items-center justify-between mb-2",
                                                             h3 { class: "font-semibold text-lg text-foreground-neutral-primary", "{pwj.prize.name}" }
                                                             if pwj.is_default {
@@ -818,6 +803,7 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                                                 }
                                                             }
                                                         }
+
 
                                                         if !pwj.is_default && !pwj.judges.is_empty() {
                                                             div { class: "flex flex-wrap gap-2 mt-2",
@@ -861,115 +847,11 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                                         selected_prize.set(None);
                                                         show_prize_judge_picker.set(false);
                                                     },
-
-                                    // Assigned judges list
-
-                                    // Update selected judges
-
-                                    // Judge picker dropdown
-                                    // Update selected judges
-
-                                    // Make Default button
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
                                                     Icon { width: 20, height: 20, icon: LdX }
                                                 }
                                             }
+
+
 
                                             div { class: "mb-4",
                                                 div { class: "flex items-center justify-between mb-2",
@@ -1041,54 +923,66 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                                     }
                                                     div { class: "max-h-48 overflow-y-auto space-y-1",
                                                         {
-                                                            let search = prize_judge_search.read().to_lowercase();
+                                                            let judges_result = judges_resource.read();
+                                                            let filtered_judges = match judges_result.as_ref() {
+                                                                Some(Ok(response)) => response.people.clone(),
+                                                                _ => Vec::new(),
+                                                            };
+
                                                             let assigned_ids: Vec<i32> = selected_prize_judges
                                                                 .read()
                                                                 .iter()
                                                                 .map(|j| j.user_id)
                                                                 .collect();
-                                                            let filtered: Vec<_> = available_users
-                                                                .read()
-                                                                .iter()
-                                                                .filter(|(id, name)| {
-                                                                    !assigned_ids.contains(id) && name.to_lowercase().contains(&search)
-                                                                })
-                                                                .take(10)
-                                                                .cloned()
-                                                                .collect();
+
                                                             rsx! {
-                                                                for (id , name) in filtered {
-                                                                    {
-                                                                        let slug = slug.clone();
-                                                                        let refresh = refresh.clone();
-                                                                        let prize_id = selected_prize.read().as_ref().map(|p| p.id).unwrap_or_default();
-                                                                        rsx! {
-                                                                            button {
-                                                                                class: "w-full text-left px-3 py-2 hover:bg-background-neutral-secondary-enabled rounded cursor-pointer",
-                                                                                onclick: move |_| {
-                                                                                    let slug = slug.clone();
-                                                                                    let refresh = refresh.clone();
-                                                                                    spawn(async move {
-                                                                                        let request = AssignJudgesRequest {
-                                                                                            judge_ids: vec![id],
-                                                                                        };
-                                                                                        if assign_prize_judges(slug.clone(), prize_id, request).await.is_ok() {
-                                                                                            refresh();
-                                                                                            if let Ok(p) = get_prizes_with_judges(slug).await {
-                                                                                                prizes_with_judges.set(p.clone());
-                                                                                                let judges = p
-                                                                                                    .iter()
-                                                                                                    .find(|pwj| pwj.prize.id == prize_id)
-                                                                                                    .map(|pwj| pwj.judges.clone())
-                                                                                                    .unwrap_or_default();
-                                                                                                selected_prize_judges.set(judges);
-                                                                                            }
-                                                                                            show_prize_judge_picker.set(false);
-                                                                                            prize_judge_search.set(String::new());
-                                                                                        }
-                                                                                    });
-                                                                                },
-                                                                                "{name}"
+                                                                if let Some(Err(e)) = judges_result.as_ref() {
+                                                                    div { class: "p-2 text-sm text-foreground-danger-primary",
+                                                                        "Error loading judges: {e}"
+                                                                    }
+                                                                } else if filtered_judges.is_empty() {
+                                                                    div { class: "p-2 text-sm text-foreground-neutral-secondary",
+                                                                        "No judges found."
+                                                                    }
+                                                                } else {
+                                                                    for person in filtered_judges {
+                                                                        if !assigned_ids.contains(&person.user_id) {
+                                                                            {
+                                                                                let id = person.user_id;
+                                                                                let name = person.name.clone().unwrap_or_else(|| person.email.clone());
+                                                                                let slug = slug.clone();
+                                                                                let refresh = refresh.clone();
+                                                                                let prize_id = selected_prize.read().as_ref().map(|p| p.id).unwrap_or_default();
+
+                                                                                rsx! {
+                                                                                    button {
+                                                                                        class: "w-full text-left px-3 py-2 hover:bg-background-neutral-secondary-enabled rounded cursor-pointer",
+                                                                                        onclick: move |_| {
+                                                                                            let slug = slug.clone();
+                                                                                            let refresh = refresh.clone();
+                                                                                            spawn(async move {
+                                                                                                let request = AssignJudgesRequest {
+                                                                                                    judge_ids: vec![id],
+                                                                                                };
+                                                                                                if assign_prize_judges(slug.clone(), prize_id, request).await.is_ok() {
+                                                                                                    refresh();
+                                                                                                    if let Ok(p) = get_prizes_with_judges(slug).await {
+                                                                                                        prizes_with_judges.set(p.clone());
+                                                                                                        let judges = p
+                                                                                                            .iter()
+                                                                                                            .find(|pwj| pwj.prize.id == prize_id)
+                                                                                                            .map(|pwj| pwj.judges.clone())
+                                                                                                            .unwrap_or_default();
+                                                                                                        selected_prize_judges.set(judges);
+                                                                                                    }
+                                                                                                    show_prize_judge_picker.set(false);
+                                                                                                    prize_judge_search.set(String::new());
+                                                                                                }
+                                                                                            });
+                                                                                        },
+                                                                                        "{name}"
+                                                                                    }
+                                                                                }
                                                                             }
                                                                         }
                                                                     }
@@ -1126,9 +1020,9 @@ pub fn HackathonJudgingAdmin(slug: String) -> Element {
                                                     },
                                                     "Assign All Judges"
                                                 }
-
                                             }
                                         }
+
                                     }
                                 }
                             }
