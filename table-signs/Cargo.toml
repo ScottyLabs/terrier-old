@@ -1,0 +1,16 @@
+[package]
+name = "table-signs"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "table-signs"
+path = "src/main.rs"
+
+[dependencies]
+printpdf = { version = "0.9", default-features = false, features = ["png", "jpeg", "gif", "text_layout"] }
+qrcodegen = "1.8.0"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+ttf-parser = "0.25"

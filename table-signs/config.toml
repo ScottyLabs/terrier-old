@@ -1,0 +1,28 @@
+table_start = 0
+table_end = 150
+url_template = "https://terrier.scottylabs.org/h/tartanhacks-2026/table-checkin/{table_number}"
+output_dir = "output"
+
+# Landscape letter size (mm)
+page_width_mm = 279.4
+page_height_mm = 215.9
+
+background_color = [1.0, 1.0, 1.0]
+background_image = "background.jpg"
+
+font_path = "fonts/PPRader-Regular.otf"
+table_number_font_size_pt = 288.0
+# #272727
+table_number_color = [0.153, 0.153, 0.153]
+
+qr_module_size_mm = 1.0
+qr_color = [0.0, 0.0, 0.0]
+spacing_mm = 20.0
+
+# Vertical offset as a percentage of page height (0.0-100.0).
+# Shifts the table number + QR group downward from center.
+# Useful when the background image has a logo/title at the top.
+vertical_offset_pct = 5.0
+
+# Debug mode: only generate the first and last table PDFs
+debug = false
