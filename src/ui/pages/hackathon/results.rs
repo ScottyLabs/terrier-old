@@ -762,6 +762,28 @@ fn ProjectDetailModal(
                         }
                     }
                 }
+
+                // Submission Data JSON (Collapsible)
+                if let Some(data) = &project.submission_data {
+                    div { class: "pt-4 mt-4 border-t border-stroke-neutral-1",
+                        details { class: "group",
+                            summary { class: "list-none cursor-pointer flex items-center gap-2 text-sm font-medium text-foreground-neutral-primary hover:text-foreground-brand-primary transition-colors select-none",
+                                Icon {
+                                    width: 16,
+                                    height: 16,
+                                    icon: LdChevronDown,
+                                    class: "transition-transform group-open:rotate-180",
+                                }
+                                "Raw Submission Data"
+                            }
+                            div { class: "mt-2 bg-background-neutral-secondary rounded-lg p-4 overflow-x-auto",
+                                pre { class: "text-xs font-mono text-foreground-neutral-secondary whitespace-pre-wrap break-words",
+                                    "{serde_json::to_string_pretty(data).unwrap_or_default()}"
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

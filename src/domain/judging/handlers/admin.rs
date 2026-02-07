@@ -214,6 +214,7 @@ pub async fn get_prize_track_results(
             presentation_url,
             video_url,
             ai_summary: None, // AI summary will be handled by detail modal
+            submission_data: Some(sub.submission_data.clone()),
         });
     }
 

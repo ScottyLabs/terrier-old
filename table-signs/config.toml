@@ -1,5 +1,5 @@
-table_start = 0
-table_end = 150
+table_start = 150
+table_end = 250
 url_template = "https://terrier.scottylabs.org/h/tartanhacks-2026/table-checkin/{table_number}"
 output_dir = "output"
 

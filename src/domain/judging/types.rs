@@ -295,6 +295,7 @@ pub struct ProjectResultInfo {
     pub presentation_url: Option<String>,
     pub video_url: Option<String>,
     pub ai_summary: Option<String>,
+    pub submission_data: Option<serde_json::Value>,
 }
 
 /// Full results for a prize track
