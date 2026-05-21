@@ -1,6 +1,8 @@
 //! Unified judging mode: two-phase project selection and batch comparison submission.
 
 use crate::domain::judging::types::*;
+#[cfg(feature = "server")]
+use crate::domain::submissions::fields::SubmissionFields;
 use dioxus::prelude::*;
 
 #[cfg(feature = "server")]
@@ -156,11 +158,8 @@ pub async fn get_unified_state(slug: String) -> Result<UnifiedJudgingState, Serv
                     {
                         current_best_team_name = Some(team.name);
                     }
-                    current_best_description = sub
-                        .submission_data
-                        .get("description")
-                        .and_then(|d| d.as_str())
-                        .map(|s| s.to_string());
+                    current_best_description =
+                        SubmissionFields::from_json(&sub.submission_data).description;
                     current_best_table_number = sub.table_number;
                 }
             }
@@ -200,22 +199,16 @@ pub async fn get_unified_state(slug: String) -> Result<UnifiedJudgingState, Serv
             .map_err(|e| ServerFnError::new(format!("Failed to fetch team: {}", e)))?
             .ok_or_else(|| ServerFnError::new("Team not found"))?;
 
+        let submission_fields = SubmissionFields::from_json(&sub.submission_data);
+
         Some(CurrentProject {
             visit_id: visit.id,
             submission_id: sub.id,
             team_name: team.name.clone(),
-            project_name: sub
-                .submission_data
-                .get("projectName")
-                .and_then(|n| n.as_str())
-                .map(|s| s.to_string()),
+            project_name: submission_fields.project_name,
             location: None, // Deprecated in favor of table_number
             table_number: sub.table_number.clone(),
-            description: sub
-                .submission_data
-                .get("description")
-                .and_then(|d| d.as_str())
-                .map(|s| s.to_string()),
+            description: submission_fields.description,
             submission_data: sub.submission_data,
             start_time: visit.start_time,
         })
@@ -727,22 +720,16 @@ pub async fn request_next_project(slug: String) -> Result<Option<CurrentProject>
         .map_err(|e| ServerFnError::new(format!("Failed to fetch team: {}", e)))?
         .ok_or_else(|| ServerFnError::new("Team not found"))?;
 
+    let submission_fields = SubmissionFields::from_json(&selected_sub.submission_data);
+
     Ok(Some(CurrentProject {
         visit_id: visit.id,
         submission_id: selected_sub.id,
         team_name: team.name.clone(),
-        project_name: selected_sub
-            .submission_data
-            .get("projectName")
-            .and_then(|n| n.as_str())
-            .map(|s| s.to_string()),
+        project_name: submission_fields.project_name,
         location: None,
         table_number: selected_sub.table_number.clone(),
-        description: selected_sub
-            .submission_data
-            .get("description")
-            .and_then(|d| d.as_str())
-            .map(|s| s.to_string()),
+        description: submission_fields.description,
         submission_data: selected_sub.submission_data.clone(),
         start_time: visit.start_time,
     }))
@@ -1041,16 +1028,14 @@ pub async fn generate_judging_questions(
     }
 
     // Get project details
-    let project_name = sub
-        .submission_data
-        .get("projectName")
-        .and_then(|n| n.as_str())
+    let submission_fields = SubmissionFields::from_json(&sub.submission_data);
+    let project_name = submission_fields
+        .project_name
+        .as_deref()
         .unwrap_or("Untitled Project");
-
-    let description = sub
-        .submission_data
-        .get("description")
-        .and_then(|d| d.as_str())
+    let description = submission_fields
+        .description
+        .as_deref()
         .unwrap_or("No description provided.");
 
     // Check if we have an API key

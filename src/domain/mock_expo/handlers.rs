@@ -1,3 +1,4 @@
+use crate::domain::submissions::fields::SubmissionFields;
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -368,11 +369,9 @@ pub async fn assign_random_scores(slug: String) -> Result<GenerationResult, Serv
 
         // Get current description
         let mut data = sub.submission_data;
-        let mut description = data
-            .get("description")
-            .and_then(|d| d.as_str())
-            .unwrap_or("")
-            .to_string();
+        let mut description = SubmissionFields::from_json(&data)
+            .description
+            .unwrap_or_default();
 
         // Check if already has scores (simple check to avoid appending multiple times if run twice)
         // We will just append anyway as per request "adds to the description", but maybe avoiding duplicate is better?

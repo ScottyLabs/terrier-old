@@ -21,7 +21,9 @@ RUN cargo install dioxus-cli --locked
 
 # Copy source and build
 COPY . .
-RUN dx bundle --platform web --release
+RUN dx bundle --platform web --release \
+    && test -f target/dx/terrier/release/server/terrier \
+    && test -d target/dx/terrier/release/web/public
 
 # Runtime image
 FROM debian:bookworm-slim AS runtime
@@ -34,9 +36,10 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the build output (binary + public assets) from builder
-COPY --from=builder /app/target/dx/terrier/release/web /app
+# Dioxus puts the server binary and web assets in separate output dirs
+COPY --from=builder /app/target/dx/terrier/release/server/terrier /app/terrier
+COPY --from=builder /app/target/dx/terrier/release/web/public /app/public
 
-EXPOSE 3000
+EXPOSE 8080
 
 CMD ["/app/terrier"]

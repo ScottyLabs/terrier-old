@@ -6,6 +6,7 @@ Hackathon management platform written entirely in Rust.
 
 - [Contributing Guide](CONTRIBUTING.md) - Set up your development environment
 - [Production Setup](SETUP.md) - Deploy Terrier in production
+- [Railway Deployment](RAILWAY.md) - Deploy on Railway with per-service guide
 
 ## Tech Stack
 

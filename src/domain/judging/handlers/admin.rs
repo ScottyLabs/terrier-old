@@ -1,6 +1,8 @@
 //! Admin endpoints: judge assignment management, results, AI summaries.
 
 use crate::domain::judging::types::*;
+#[cfg(feature = "server")]
+use crate::domain::submissions::fields::SubmissionFields;
 use dioxus::prelude::*;
 
 #[cfg(feature = "server")]
@@ -153,35 +155,12 @@ pub async fn get_prize_track_results(
             .cloned()
             .unwrap_or_else(|| "Unknown Team".to_string());
 
-        let project_name = sub
-            .submission_data
-            .get("projectName")
-            .and_then(|n| n.as_str())
-            .map(|s| s.to_string());
-
-        let description = sub
-            .submission_data
-            .get("description")
-            .and_then(|d| d.as_str())
-            .map(|s| s.to_string());
-
-        let repo_url = sub
-            .submission_data
-            .get("repoUrl")
-            .and_then(|u| u.as_str())
-            .map(|s| s.to_string());
-
-        let presentation_url = sub
-            .submission_data
-            .get("presentationUrl")
-            .and_then(|u| u.as_str())
-            .map(|s| s.to_string());
-
-        let video_url = sub
-            .submission_data
-            .get("videoUrl")
-            .and_then(|u| u.as_str())
-            .map(|s| s.to_string());
+        let submission_fields = SubmissionFields::from_json(&sub.submission_data);
+        let project_name = submission_fields.project_name;
+        let description = submission_fields.description;
+        let repo_url = submission_fields.repo_url;
+        let presentation_url = submission_fields.presentation_url;
+        let video_url = submission_fields.video_url;
 
         let mut feature_ranks: Vec<FeatureRankInfo> = Vec::new();
         let mut weighted_score: f32 = 0.0;
@@ -363,16 +342,14 @@ pub async fn generate_ai_summary(
     }
 
     // Get project description
-    let description = sub
-        .submission_data
-        .get("description")
-        .and_then(|d| d.as_str())
+    let submission_fields = SubmissionFields::from_json(&sub.submission_data);
+    let description = submission_fields
+        .description
+        .as_deref()
         .unwrap_or("No description provided.");
-
-    let project_name = sub
-        .submission_data
-        .get("projectName")
-        .and_then(|n| n.as_str())
+    let project_name = submission_fields
+        .project_name
+        .as_deref()
         .unwrap_or("Untitled Project");
 
     // Get all judge visits/notes for this submission
