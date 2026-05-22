@@ -22,7 +22,7 @@ RUN cargo install dioxus-cli --version 0.7.3 --locked
 # Copy source and build
 COPY . .
 RUN dx bundle --platform web --release \
-    && test -f target/dx/terrier/release/web/server \
+    && test -f target/dx/terrier/release/web/terrier \
     && test -d target/dx/terrier/release/web/public
 
 # Runtime image
@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Dioxus 0.7 bundles server binary and web assets under release/web/
-COPY --from=builder /app/target/dx/terrier/release/web/server /app/terrier
+COPY --from=builder /app/target/dx/terrier/release/web/terrier /app/terrier
 COPY --from=builder /app/target/dx/terrier/release/web/public /app/public
 
 EXPOSE 8080
