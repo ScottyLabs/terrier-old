@@ -16,13 +16,13 @@ COPY --from=planner /app/migration /app/migration
 
 RUN cargo chef cook --release --recipe-path recipe.json
 
-# Install dioxus-cli
-RUN cargo install dioxus-cli --locked
+# Install dioxus-cli (pin to match dioxus crate version in Cargo.toml)
+RUN cargo install dioxus-cli --version 0.7.3 --locked
 
 # Copy source and build
 COPY . .
 RUN dx bundle --platform web --release \
-    && test -f target/dx/terrier/release/server/terrier \
+    && test -f target/dx/terrier/release/web/server \
     && test -d target/dx/terrier/release/web/public
 
 # Runtime image
@@ -36,8 +36,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Dioxus puts the server binary and web assets in separate output dirs
-COPY --from=builder /app/target/dx/terrier/release/server/terrier /app/terrier
+# Dioxus 0.7 bundles server binary and web assets under release/web/
+COPY --from=builder /app/target/dx/terrier/release/web/server /app/terrier
 COPY --from=builder /app/target/dx/terrier/release/web/public /app/public
 
 EXPOSE 8080

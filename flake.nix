@@ -74,7 +74,7 @@
             installPhase = ''
               runHook preInstall
               mkdir -p $out/public
-              cp target/dx/terrier/release/server/terrier $out/terrier
+              cp target/dx/terrier/release/web/server $out/terrier
               cp -r target/dx/terrier/release/web/public/* $out/public/
               runHook postInstall
             '';
